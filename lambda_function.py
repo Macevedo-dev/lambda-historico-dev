@@ -30,31 +30,23 @@ RDS_CONFIG_VENTAS['database'] = 'bi-ventas-dev'
 RDS_CONFIG_HISTORICO = RDS_CONFIG_ADMIN.copy()
 RDS_CONFIG_HISTORICO['database'] = 'historico_dev'
 
-# Lista de identificadores base COMPLETA para unidades FLEX
 IDENTIFICADORES_BASE = ["er", "ss", "pn", "vm", "en", "pf", "vn", "ao", "av", 
                        "lr", "ra", "sf", "mm", "ce", "jp", "vt", "lc", "ld", "sm", 
                        "rs", "mt", "tp", "bl", "vk", "cg", "pnf"]
 
 def es_unidad_flex(unit_code):
-    """Determina si una unidad es flex basándose en su código"""
     if not unit_code or not isinstance(unit_code, str):
         return False
     
     unit_code_lower = unit_code.lower().strip()
-    
-    # Eliminar espacios y caracteres especiales
     unit_code_clean = ''.join(c for c in unit_code_lower if c.isalnum())
     
-    # 1. Verificar si contiene 'flex' en cualquier parte
     if 'flex' in unit_code_clean:
         return True
     
-    # 2. Nueva lógica: Buscar cualquier identificador base seguido de 'f' y números
-    # Ordenar identificadores de más largo a más corto para evitar coincidencias parciales
     identificadores_ordenados = sorted(IDENTIFICADORES_BASE, key=len, reverse=True)
     
     for identificador in identificadores_ordenados:
-        # Patrón: identificador + 'f' + números
         patron = f'^{identificador}f\\d+$'
         if re.match(patron, unit_code_clean):
             return True
@@ -62,45 +54,42 @@ def es_unidad_flex(unit_code):
     return False
 
 class GlobalCache:
-    """Caché global para almacenar todos los datos de APIs al inicio"""
     def __init__(self):
         self._cache = {}
         self._initialized = False
         
     def initialize(self):
-        """Obtiene TODOS los datos de APIs una sola vez al inicio"""
         if not self._initialized:
-            logger.info("🚀 INICIALIZANDO CACHÉ GLOBAL - OBTENIENDO TODOS LOS DATOS DE APIS")
+            logger.info("INICIALIZANDO CACHE GLOBAL")
             
-            logger.info("📥 Obteniendo todos los rentals (occupied y ended)...")
+            logger.info("Obteniendo todos los rentals")
             self._cache['all_rentals'] = self._fetch_all_paginated("unit-rentals", {"include": "unit", "state": "occupied,ended"})
             
-            logger.info("📥 Obteniendo todos los jobs...")
+            logger.info("Obteniendo todos los jobs")
             self._cache['all_jobs'] = self._fetch_all_paginated("jobs", {"state": "completed", "orderState": "completed"})
             
-            logger.info("📥 Obteniendo todas las unidades...")
+            logger.info("Obteniendo todas las unidades")
             self._cache['all_units'] = self._fetch_all_paginated("units", {"state": "occupied,reserved,overdue,vacant", "include": "unitType"})
             
-            logger.info("📥 Obteniendo todos los sites...")
+            logger.info("Obteniendo todos los sites")
             self._cache['all_sites'] = self._fetch_all_paginated("sites")
             
-            logger.info("📥 Extrayendo sucursales KB...")
+            logger.info("Extrayendo sucursales KB")
             self._cache['sucursales_kb'] = self._extract_sucursales_kb()
             
-            logger.info("📥 Creando mapa de sucursales...")
+            logger.info("Creando mapa de sucursales")
             self._cache['mapa_sucursales'], self._cache['info_sucursales'] = self._create_mapa_sucursales()
             
-            logger.info("📥 Obteniendo rentals del mes actual...")
+            logger.info("Obteniendo rentals del mes actual")
             self._cache['rentals_mes_actual'] = self._get_rentals_mes_actual()
             
-            logger.info("📥 Obteniendo reportes de ayer/hoy...")
+            logger.info("Obteniendo reportes de ayer/hoy")
             self._cache['reportes_ayer_hoy'] = self._obtener_reportes_ayer_hoy()
             
             self._initialized = True
-            logger.info(f"✅ CACHÉ INICIALIZADO: {len(self._cache['all_rentals'])} rentals, {len(self._cache['all_units'])} unidades, {len(self._cache['all_sites'])} sites")
+            logger.info(f"CACHE INICIALIZADO: {len(self._cache['all_rentals'])} rentals, {len(self._cache['all_units'])} unidades, {len(self._cache['all_sites'])} sites")
     
     def _fetch_all_paginated(self, endpoint, params=None, limit=100, delay=1):
-        """Función interna para obtener datos paginados"""
         all_items = []
         offset = 0
         
@@ -151,13 +140,12 @@ class GlobalCache:
                 time.sleep(delay)
                 
             except requests.exceptions.RequestException as e:
-                logger.error(f"Error de conexión en {endpoint}: {e}")
+                logger.error(f"Error de conexion en {endpoint}: {e}")
                 break
                 
         return all_items
     
     def _extract_sucursales_kb(self):
-        """Extrae sucursales KB desde los sites cacheados"""
         sites = self._cache['all_sites']
         sucursales_kb = []
         for site in sites:
@@ -171,7 +159,6 @@ class GlobalCache:
         return sucursales_kb
     
     def _create_mapa_sucursales(self):
-        """Crea mapa de sucursales desde sites cacheados"""
         sites = self._cache['all_sites']
         mapa_sucursales = {}
         info_sucursales = {}
@@ -200,7 +187,6 @@ class GlobalCache:
         return mapa_sucursales, info_sucursales
     
     def _get_rentals_mes_actual(self):
-        """Filtra rentals del mes actual desde el caché"""
         today = datetime.now(timezone.utc).date()
         first_day_of_month = today.replace(day=1)
         
@@ -231,11 +217,9 @@ class GlobalCache:
         return rentals_mes
     
     def _obtener_usuarios_rapido(self, rentals):
-        """Obtiene usuarios de forma eficiente para los reportes de ayer/hoy"""
         if not rentals:
             return {}
         
-        # Extraer IDs únicos de usuarios
         user_ids = set()
         for rental in rentals:
             owner_id = rental.get("ownerId")
@@ -245,7 +229,7 @@ class GlobalCache:
         if not user_ids:
             return {}
         
-        logger.info(f"Obteniendo {len(user_ids)} usuarios para reportes...")
+        logger.info(f"Obteniendo {len(user_ids)} usuarios para reportes")
         usuarios_por_id = {}
         
         def fetch_user(user_id):
@@ -266,7 +250,6 @@ class GlobalCache:
                 logger.warning(f"Error obteniendo usuario {user_id}: {e}")
                 return user_id, None
         
-        # Usar ThreadPoolExecutor para obtener usuarios en paralelo
         with ThreadPoolExecutor(max_workers=10) as executor:
             futures = {executor.submit(fetch_user, user_id): user_id for user_id in user_ids}
             
@@ -275,15 +258,13 @@ class GlobalCache:
                 if user_data:
                     usuarios_por_id[user_id] = user_data
         
-        logger.info(f"✅ Obtenidos {len(usuarios_por_id)} usuarios para reportes")
+        logger.info(f"Obtenidos {len(usuarios_por_id)} usuarios para reportes")
         return usuarios_por_id
     
     def _calcular_area_m2_reportes(self, unit_data):
-        """Calcula área en m2 para reportes"""
         if not unit_data:
             return 10.0
         
-        # Intentar length x width primero
         try:
             length = unit_data.get("length")
             width = unit_data.get("width")
@@ -296,7 +277,6 @@ class GlobalCache:
         except:
             pass
         
-        # Intentar área directa
         try:
             area = unit_data.get("area")
             if area:
@@ -309,23 +289,16 @@ class GlobalCache:
         return 10.0
     
     def _procesar_rentals_reportes(self, rentals, usuarios_por_id):
-        """Procesa rentals para reportes de ayer/hoy"""
         moveins_por_fecha = {}
         moveouts_por_fecha = {}
         
         for rental in rentals:
-            # Determinar si es move-in o move-out
             start_date_str = rental.get("startDate")
             end_date_str = rental.get("endDate")
             state = rental.get("state", "").lower()
+            unit_code = rental.get("unit", {}).get("name") or f"UNIT_{rental.get('id', 'N/A')}"
             
-            # Determinar fecha del movimiento
-            fecha_movimiento = None
-            es_movein = False
-            es_moveout = False
-            
-            # MOVE-IN: rental con startDate en ayer/hoy y estado occupied o ended
-            if start_date_str and state in ["occupied", "ended"]:
+            if start_date_str:
                 try:
                     if "T" in start_date_str:
                         start_date = datetime.fromisoformat(start_date_str.replace("Z", "+00:00")).date()
@@ -338,43 +311,40 @@ class GlobalCache:
                     if start_date in [yesterday, today]:
                         fecha_movimiento = start_date
                         es_movein = True
-                except:
+                        es_moveout = False
+                except Exception as e:
+                    logger.warning(f"Error parsing startDate {start_date_str}: {e}")
                     continue
             
-            # MOVE-OUT: rental con endDate en ayer/hoy y estado ended
-            if end_date_str and state == "ended":
+            if state == "ended" and end_date_str:
                 try:
                     if "T" in end_date_str:
                         end_date = datetime.fromisoformat(end_date_str.replace("Z", "+00:00")).date()
                     else:
-                        end_date = datetime.strptime(end_date_str, "%Y-%m-d").date()
+                        end_date = datetime.strptime(end_date_str, "%Y-%m-%d").date()
                     
                     today = datetime.now(timezone.utc).date()
                     yesterday = today - timedelta(days=1)
                     
                     if end_date in [yesterday, today]:
                         fecha_movimiento = end_date
+                        es_movein = False
                         es_moveout = True
-                except:
+                except Exception as e:
+                    logger.warning(f"Error parsing endDate {end_date_str}: {e}")
                     continue
             
             if not fecha_movimiento:
                 continue
             
-            # Obtener datos de la unidad
             unit_data = rental.get("unit", {})
             unit_code = unit_data.get("name") or unit_data.get("code") or f"UNIT_{rental.get('id', 'N/A')}"
-            
-            # Calcular área
             area_m2 = self._calcular_area_m2_reportes(unit_data)
-            
-            # Obtener site
             site_id = unit_data.get("siteId") or rental.get("siteId")
             site_code = "SIN_SITE"
             if site_id:
                 site_code = str(site_id).upper()
             
-            # Obtener información del cliente
             customer_name = "Cliente no disponible"
             customer_company = ""
             owner_id = rental.get("ownerId")
@@ -389,7 +359,6 @@ class GlobalCache:
                 elif isinstance(company_data, str):
                     customer_company = company_data
             
-            # Procesar cargos
             descuento_total = 0
             seguro_monto = 0
             seguro_tipo = "No tiene seguro"
@@ -401,7 +370,6 @@ class GlobalCache:
                 if amount < 0:
                     descuento_total += abs(amount)
                 
-                # Verificar seguro
                 title = charge.get('title', {})
                 if isinstance(title, dict):
                     title_text = title.get('es', '') or title.get('en', '') or str(title)
@@ -413,10 +381,8 @@ class GlobalCache:
                     seguro_monto = amount
                     seguro_tipo = title_text
             
-            # Precio
             precio = float(rental.get("price", 0))
             
-            # Crear registro completo
             movimiento_detalle = {
                 "unit_code": unit_code,
                 "m2": round(area_m2, 2),
@@ -430,7 +396,6 @@ class GlobalCache:
                 "precio": precio
             }
             
-            # Agregar al diccionario correspondiente
             fecha_key = fecha_movimiento.isoformat()
             
             if es_movein:
@@ -460,93 +425,110 @@ class GlobalCache:
         return moveins_por_fecha, moveouts_por_fecha
     
     def _obtener_reportes_ayer_hoy(self):
-        """OBTIENE TODOS LOS REPORTES DE AYER/HOY EN UNA SOLA EJECUCIÓN"""
         today = datetime.now(timezone.utc).date()
         yesterday = today - timedelta(days=1)
         
-        logger.info(f"Obteniendo reportes de {yesterday} a {today}...")
+        logger.info(f"Obteniendo reportes de {yesterday} a {today}")
         
-        # Parámetros para obtener TODOS los rentals de ayer y hoy
-        params = {
-            "fields": "id,startDate,endDate,ownerId,price,siteId,unit,charges,state",
-            "include": "unit",
-            "limit": 200,
-            "startDateFrom": yesterday.isoformat(),
-            "startDateTo": today.isoformat(),
-            "endDateFrom": yesterday.isoformat(),
-            "endDateTo": today.isoformat(),
-            "state": "occupied,ended"
-        }
+        all_rentals = self._cache.get('all_rentals', [])
         
-        try:
-            resp = requests.get(
-                f"{BASE_URL}/unit-rentals", 
-                headers=headers, 
-                params=params, 
-                timeout=30
-            )
-            
-            if resp.status_code == 200:
-                data = resp.json()
-                rentals = data.get("data", []) if isinstance(data, dict) else data
-                logger.info(f"✅ Obtenidos {len(rentals)} rentals para reportes ayer/hoy")
-                
-                if not rentals:
-                    return self._crear_estructura_vacia_reporte()
-                
-                # Obtener usuarios
-                usuarios_por_id = self._obtener_usuarios_rapido(rentals)
-                
-                # Procesar rentals
-                moveins_por_fecha, moveouts_por_fecha = self._procesar_rentals_reportes(rentals, usuarios_por_id)
-                
-                # Construir resultado final
-                resultado = self._crear_estructura_vacia_reporte()
-                
-                # Procesar move-ins
-                for fecha_key, datos in sorted(moveins_por_fecha.items(), reverse=True):
-                    resultado["data_moveins"]["detalle_moveins_diarios"].append({
-                        "fecha": fecha_key,
-                        "unidades": datos["unidades"],
-                        "m2": round(datos["m2_total"], 2)
-                    })
-                    
-                    for unidad in datos["detalle_unidades"]:
-                        unidad_con_fecha = unidad.copy()
-                        unidad_con_fecha["fecha"] = fecha_key
-                        resultado["data_moveins"]["detalle_completo_unidades"].append(unidad_con_fecha)
-                    
-                    resultado["data_moveins"]["total_unidades"] += datos["unidades"]
-                    resultado["data_moveins"]["total_m2_movein"] += datos["m2_total"]
-                
-                # Procesar move-outs
-                for fecha_key, datos in sorted(moveouts_por_fecha.items(), reverse=True):
-                    resultado["data_moveouts"]["detalle_moveouts_diarios"].append({
-                        "fecha": fecha_key,
-                        "unidades": datos["unidades"],
-                        "m2": round(datos["m2_total"], 2)
-                    })
-                    
-                    for unidad in datos["detalle_unidades"]:
-                        unidad_con_fecha = unidad.copy()
-                        unidad_con_fecha["fecha"] = fecha_key
-                        resultado["data_moveouts"]["detalle_completo_unidades"].append(unidad_con_fecha)
-                    
-                    resultado["data_moveouts"]["total_unidades"] += datos["unidades"]
-                    resultado["data_moveouts"]["total_m2_moveout"] += datos["m2_total"]
-                
-                logger.info(f"Reportes ayer/hoy: Move-ins={resultado['data_moveins']['total_unidades']}, Move-outs={resultado['data_moveouts']['total_unidades']}")
-                return resultado
-            else:
-                logger.error(f"❌ Error API reportes: {resp.status_code}")
-                return self._crear_estructura_vacia_reporte()
-                
-        except Exception as e:
-            logger.error(f"❌ Error conexión reportes: {e}")
+        if not all_rentals:
+            logger.error("No hay rentals en el cache")
             return self._crear_estructura_vacia_reporte()
+        
+        logger.info(f"Obtenidos {len(all_rentals)} rentals del cache para reportes")
+        
+        rentals_ayer_hoy = []
+        
+        for rental in all_rentals:
+            start_date_str = rental.get("startDate")
+            end_date_str = rental.get("endDate")
+            state = rental.get("state", "").lower()
+            
+            if state not in ["occupied", "ended"]:
+                continue
+            
+            tiene_fecha_valida = False
+            
+            if start_date_str:
+                try:
+                    if "T" in start_date_str:
+                        start_date = datetime.fromisoformat(start_date_str.replace("Z", "+00:00")).date()
+                    else:
+                        start_date = datetime.strptime(start_date_str, "%Y-%m-%d").date()
+                    
+                    if start_date in [yesterday, today]:
+                        tiene_fecha_valida = True
+                except Exception as e:
+                    logger.warning(f"Error parsing startDate {start_date_str}: {e}")
+            
+            if end_date_str and state == "ended":
+                try:
+                    if "T" in end_date_str:
+                        end_date = datetime.fromisoformat(end_date_str.replace("Z", "+00:00")).date()
+                    else:
+                        end_date = datetime.strptime(end_date_str, "%Y-%m-%d").date()
+                    
+                    if end_date in [yesterday, today]:
+                        tiene_fecha_valida = True
+                except Exception as e:
+                    logger.warning(f"Error parsing endDate {end_date_str}: {e}")
+            
+            if tiene_fecha_valida:
+                rentals_ayer_hoy.append(rental)
+        
+        logger.info(f"{len(rentals_ayer_hoy)} rentals tienen fechas en ayer/hoy")
+        
+        if not rentals_ayer_hoy:
+            return self._crear_estructura_vacia_reporte()
+        
+        usuarios_por_id = self._obtener_usuarios_rapido(rentals_ayer_hoy)
+        moveins_por_fecha, moveouts_por_fecha = self._procesar_rentals_reportes(rentals_ayer_hoy, usuarios_por_id)
+        
+        resultado = self._crear_estructura_vacia_reporte()
+        
+        for fecha_key, datos in sorted(moveins_por_fecha.items(), reverse=True):
+            resultado["data_moveins"]["detalle_moveins_diarios"].append({
+                "fecha": fecha_key,
+                "unidades": datos["unidades"],
+                "m2": round(datos["m2_total"], 2)
+            })
+            
+            for unidad in datos["detalle_unidades"]:
+                unidad_con_fecha = unidad.copy()
+                unidad_con_fecha["fecha"] = fecha_key
+                resultado["data_moveins"]["detalle_completo_unidades"].append(unidad_con_fecha)
+            
+            resultado["data_moveins"]["total_unidades"] += datos["unidades"]
+            resultado["data_moveins"]["total_m2_movein"] += datos["m2_total"]
+        
+        for fecha_key, datos in sorted(moveouts_por_fecha.items(), reverse=True):
+            resultado["data_moveouts"]["detalle_moveouts_diarios"].append({
+                "fecha": fecha_key,
+                "unidades": datos["unidades"],
+                "m2": round(datos["m2_total"], 2)
+            })
+            
+            for unidad in datos["detalle_unidades"]:
+                unidad_con_fecha = unidad.copy()
+                unidad_con_fecha["fecha"] = fecha_key
+                resultado["data_moveouts"]["detalle_completo_unidades"].append(unidad_con_fecha)
+            
+            resultado["data_moveouts"]["total_unidades"] += datos["unidades"]
+            resultado["data_moveouts"]["total_m2_moveout"] += datos["m2_total"]
+        
+        logger.info(f"Reportes ayer/hoy: Move-ins={resultado['data_moveins']['total_unidades']}, Move-outs={resultado['data_moveouts']['total_unidades']}")
+        
+        if resultado["data_moveouts"]["total_unidades"] > 0:
+            logger.info("DETALLE DE MOVE-OUTS ENCONTRADOS:")
+            for unidad in resultado["data_moveouts"]["detalle_completo_unidades"][:10]:
+                logger.info(f"  - {unidad['unit_code']}: {unidad['customer']} ({unidad['company']}), {unidad['m2']} m², {unidad['fecha']}")
+        else:
+            logger.info("No se encontraron move-outs")
+        
+        return resultado
     
     def _crear_estructura_vacia_reporte(self):
-        """Crea estructura vacía para reportes"""
         today = datetime.now(timezone.utc).date()
         yesterday = today - timedelta(days=1)
         
@@ -568,13 +550,11 @@ class GlobalCache:
         }
     
     def get(self, key):
-        """Obtiene datos del caché"""
         if not self._initialized:
             self.initialize()
         return self._cache.get(key)
     
     def get_all_data(self):
-        """Obtiene todos los datos del caché"""
         if not self._initialized:
             self.initialize()
         return {
@@ -592,23 +572,27 @@ class GlobalCache:
 GLOBAL_CACHE = GlobalCache()
 
 def parse_date_to_dateobj(s):
-    """Convierte string a objeto date"""
     if not s:
         return None
     if isinstance(s, datetime):
         return s.astimezone(timezone.utc).date()
     try:
-        return datetime.strptime(s, "%Y-%m-d").date()
+        return datetime.strptime(s, "%Y-%m-%d").date()
     except Exception:
         pass
     try:
         return datetime.fromisoformat(s.replace("Z", "+00:00")).astimezone(timezone.utc).date()
     except Exception:
         pass
+    try:
+        if "T" in s:
+            return datetime.fromisoformat(s[:10]).date()
+    except Exception:
+        pass
+    
     return None
 
 def compute_area_m2(unit):
-    """Calcula área en m2 de una unidad"""
     if not isinstance(unit, dict):
         return 10.0 
     
@@ -663,7 +647,6 @@ def compute_area_m2(unit):
     return 10.0
 
 def compute_area_m2_corregida(unit):
-    """Versión MEJORADA de cálculo de área"""
     if not isinstance(unit, dict):
         return None
     
@@ -855,9 +838,6 @@ def _extract_price(obj):
     return None
 
 def procesar_rentals_con_y_sin_duplicados(all_rentals, fecha_inicio_6_meses, fecha_inicio_3_meses, today, first_day_of_month):
-    """
-    Procesa rentals con y sin duplicados para comparación
-    """
     resultados = {
         "con_duplicados": {"contratos": {}, "finiquitos": {}, "unidades_unicas": {}},
         "sin_duplicados": {"contratos": {}, "finiquitos": {}, "unidades_unicas": {}}
@@ -922,7 +902,7 @@ def procesar_rentals_con_y_sin_duplicados(all_rentals, fecha_inicio_6_meses, fec
             "finiquitos": len(unidades_finiquito_por_mes.get(mes, set()))
         }
     
-    logger.info(f"ESTADÍSTICAS DE DUPLICADOS:")
+    logger.info(f"ESTADISTICAS DE DUPLICADOS:")
     logger.info(f"   Total rentals obtenidos: {total_rentals}")
     logger.info(f"   Rentals con unit_id: {rentals_con_unit_id} ({rentals_con_unit_id/total_rentals*100:.1f}%)")
     logger.info(f"   Rentals sin unit_id: {rentals_sin_unit_id} ({rentals_sin_unit_id/total_rentals*100:.1f}%)")
@@ -930,9 +910,6 @@ def procesar_rentals_con_y_sin_duplicados(all_rentals, fecha_inicio_6_meses, fec
     return resultados
 
 def calcular_contratos_finiquitos_simplificado():
-    """
-    Función simplificada que solo calcula contratos y finiquitos sin duplicados
-    """
     try:
         today = datetime.now(timezone.utc).date()
         first_day_of_month = today.replace(day=1)
@@ -942,10 +919,10 @@ def calcular_contratos_finiquitos_simplificado():
         logger.info("CALCULANDO CONTRATOS Y FINIQUITOS SIMPLIFICADO")
         logger.info("="*70)
         logger.info(f"Fecha actual: {today}")
-        logger.info(f"6 meses atrás: {fecha_inicio_6_meses}")
-        logger.info(f"3 meses atrás: {fecha_inicio_3_meses}")
+        logger.info(f"6 meses atras: {fecha_inicio_6_meses}")
+        logger.info(f"3 meses atras: {fecha_inicio_3_meses}")
         all_rentals = GLOBAL_CACHE.get('all_rentals')
-        logger.info(f"Total rentals obtenidos del caché: {len(all_rentals)}")
+        logger.info(f"Total rentals obtenidos del cache: {len(all_rentals)}")
         resultados = procesar_rentals_con_y_sin_duplicados(
             all_rentals, fecha_inicio_6_meses, fecha_inicio_3_meses, today, first_day_of_month
         )
@@ -956,7 +933,7 @@ def calcular_contratos_finiquitos_simplificado():
         meses_analizados = len(meses_ordenados)
         contratos_mensuales = []
         finiquitos_mensuales = []
-        logger.info(f"📅 Meses analizados ({meses_analizados}): {meses_ordenados}")
+        logger.info(f"Meses analizados ({meses_analizados}): {meses_ordenados}")
         
         for mes in meses_ordenados:
             area_contratos = area_contratos_por_mes[mes]
@@ -1017,13 +994,13 @@ def calcular_contratos_finiquitos_simplificado():
             "meses_analizados": meses_analizados
         }
         
-        logger.info(f"\nRESUMEN SIMPLIFICADO:")
-        logger.info(f"   Promedio 6 meses - Contratos/día: {promedio_contratos_dia:.2f} m²")
-        logger.info(f"   Promedio 6 meses - Finiquitos/día: {promedio_finiquitos_dia:.2f} m²")
-        logger.info(f"   Promedio 6 meses - Neto/día: {promedio_neto_dia:.2f} m²")
-        logger.info(f"   Promedio 3 meses - Contratos/día: {promedio_contratos_cierre:.2f} m²")
-        logger.info(f"   Promedio 3 meses - Finiquitos/día: {promedio_finiquitos_cierre:.2f} m²")
-        logger.info(f"   Promedio 3 meses - Neto/día: {promedio_neto_cierre:.2f} m²")
+        logger.info(f"RESUMEN SIMPLIFICADO:")
+        logger.info(f"   Promedio 6 meses - Contratos/dia: {promedio_contratos_dia:.2f} m²")
+        logger.info(f"   Promedio 6 meses - Finiquitos/dia: {promedio_finiquitos_dia:.2f} m²")
+        logger.info(f"   Promedio 6 meses - Neto/dia: {promedio_neto_dia:.2f} m²")
+        logger.info(f"   Promedio 3 meses - Contratos/dia: {promedio_contratos_cierre:.2f} m²")
+        logger.info(f"   Promedio 3 meses - Finiquitos/dia: {promedio_finiquitos_cierre:.2f} m²")
+        logger.info(f"   Promedio 3 meses - Neto/dia: {promedio_neto_cierre:.2f} m²")
         
         return resultado_simplificado
         
@@ -1053,25 +1030,19 @@ def calcular_contratos_finiquitos_simplificado():
         }
 
 def calcular_y_unificar_tres_tablas():
-    """
-    Calcula y unifica las 3 tablas en un array con fecha, neto_flex, neto, neto6m
-    1. neto_flex: promedio neto diario FLEX (desde primer día del mes hasta hoy)
-    2. neto: neto diario GLOBAL (desde primer día del mes hasta hoy)
-    3. neto6m: neto ACUMULADO de los últimos 6 meses hasta cada día
-    """
     try:
         today = datetime.now(timezone.utc).date()
         first_day_of_month = today.replace(day=1)
         fecha_inicio_6_meses = today - timedelta(days=180)
         
-        logger.info("=== CALCULANDO Y UNIFICANDO 3 TABLAS PARA POWER BI ===")
-        logger.info(f"Período mes actual: {first_day_of_month} a {today}")
-        logger.info(f"Período 6 meses: {fecha_inicio_6_meses} a {today}")
+        logger.info("CALCULANDO Y UNIFICANDO 3 TABLAS PARA POWER BI")
+        logger.info(f"Periodo mes actual: {first_day_of_month} a {today}")
+        logger.info(f"Periodo 6 meses: {fecha_inicio_6_meses} a {today}")
         
         connection = pymysql.connect(**RDS_CONFIG_VENTAS)
         
         with connection.cursor() as cursor:
-            logger.info("1. Calculando neto_flex (promedio diario FLEX del mes actual)...")
+            logger.info("1. Calculando neto_flex (promedio diario FLEX del mes actual)")
             cursor.execute("""
                 SELECT DISTINCT Bodega
                 FROM dwh_transacciones 
@@ -1132,7 +1103,7 @@ def calcular_y_unificar_tres_tablas():
                 promedio_neto_flex = 0
             
             logger.info(f"neto_flex (promedio mes): {promedio_neto_flex:.2f} m²")
-            logger.info("2. Calculando neto (diario global del mes actual)...")
+            logger.info("2. Calculando neto (diario global del mes actual)")
             
             query_neto_diario = """
                 SELECT 
@@ -1166,7 +1137,7 @@ def calcular_y_unificar_tres_tablas():
                 neto_diario_dict[fecha] = neto
             
             logger.info(f"neto diario: {len(neto_diario_dict)} registros del mes actual")
-            logger.info("3. Calculando neto6m (acumulado 6 meses)...")
+            logger.info("3. Calculando neto6m (acumulado 6 meses)")
             query_acumulado_6m = """
                 SELECT 
                     DATE(Fecha) AS fecha,
@@ -1200,8 +1171,8 @@ def calcular_y_unificar_tres_tablas():
                 acumulado_total += neto_diario
                 acumulado_por_fecha[fecha] = round(acumulado_total, 2)
             
-            logger.info(f"neto6m acumulado: total {acumulado_total:.2f} m² en {len(acumulado_por_fecha)} días")
-            logger.info("Unificando las 3 tablas...")
+            logger.info(f"neto6m acumulado: total {acumulado_total:.2f} m² en {len(acumulado_por_fecha)} dias")
+            logger.info("Unificando las 3 tablas")
             todas_fechas_mes = []
             current_date = first_day_of_month
             while current_date <= today:
@@ -1256,14 +1227,14 @@ def calcular_y_unificar_tres_tablas():
             if datos_unificados:
                 logger.info(f"RESUMEN FINAL:")
                 logger.info(f"   - Promedio neto_flex (mes): {promedio_neto_flex:.2f}")
-                logger.info(f"   - Último neto diario: {datos_unificados[-1]['neto']:.2f}")
-                logger.info(f"   - Último neto6m acumulado: {datos_unificados[-1]['neto6m']:.2f}")
+                logger.info(f"   - Ultimo neto diario: {datos_unificados[-1]['neto']:.2f}")
+                logger.info(f"   - Ultimo neto6m acumulado: {datos_unificados[-1]['neto6m']:.2f}")
                 logger.info(f"   - Total acumulado 6 meses: {acumulado_total:.2f}")
-                logger.info("Primeros 3 días:")
+                logger.info("Primeros 3 dias:")
                 for item in datos_unificados[:3]:
                     logger.info(f"   {item['fecha']}: neto_flex={item['neto_flex']:.2f}, neto={item['neto']:.2f}, neto6m={item['neto6m']:.2f}")
                 
-                logger.info("Últimos 3 días:")
+                logger.info("Ultimos 3 dias:")
                 for item in datos_unificados[-3:]:
                     logger.info(f"   {item['fecha']}: neto_flex={item['neto_flex']:.2f}, neto={item['neto']:.2f}, neto6m={item['neto6m']:.2f}")
             
@@ -1303,16 +1274,13 @@ def calcular_y_unificar_tres_tablas():
             connection.close()
 
 def contar_moveouts_reales_api(all_rentals, today=None):
-    """
-    Cuenta move-outs REALES desde la API (rentals con estado 'ended' en el mes)
-    """
     try:
         if today is None:
             today = datetime.now(timezone.utc).date()
         
         first_day_of_month = today.replace(day=1)
-        logger.info(f"CONTANDO MOVE-OUTS REALES DESDE CACHÉ...")
-        logger.info(f"Período: {first_day_of_month} a {today}")
+        logger.info(f"CONTANDO MOVE-OUTS REALES DESDE CACHE")
+        logger.info(f"Periodo: {first_day_of_month} a {today}")
         moveouts_ids = set()
         moveouts_data = []
         
@@ -1331,7 +1299,7 @@ def contar_moveouts_reales_api(all_rentals, today=None):
                         end_date_str.replace("Z", "+00:00")
                     ).date()
                 else:
-                    end_date = datetime.strptime(end_date_str, "%Y-%m-d").date()
+                    end_date = datetime.strptime(end_date_str, "%Y-%m-%d").date()
                 
                 if first_day_of_month <= end_date <= today:
                     unit_id = rental.get("unitId")
@@ -1346,7 +1314,7 @@ def contar_moveouts_reales_api(all_rentals, today=None):
         
         moveouts_total = len(moveouts_ids)
         
-        logger.info(f"MOVE-OUTS REALES (CACHÉ): {moveouts_total} unidades")
+        logger.info(f"MOVE-OUTS REALES (CACHE): {moveouts_total} unidades")
         
         return moveouts_total, moveouts_data
         
@@ -1360,9 +1328,13 @@ def contar_moveins_correcto(today=None):
             today = datetime.now(timezone.utc).date()
         
         first_day_of_month = today.replace(day=1)
-        logger.info(f"CALCULANDO MOVE-INS DESDE CACHÉ")
-        logger.info(f"Período: {first_day_of_month} a {today}")
+        logger.info(f"CALCULANDO MOVE-INS DESDE CACHE - CORREGIDO")
+        logger.info(f"Periodo: {first_day_of_month} a {today}")
         all_rentals = GLOBAL_CACHE.get('all_rentals')
+        
+        if not all_rentals:
+            logger.error("No hay rentals en cache")
+            return 0, {}, []
         
         unidades_movein = set()
         conteo_estados = defaultdict(int)
@@ -1383,7 +1355,7 @@ def contar_moveins_correcto(today=None):
                         start_date_str.replace("Z", "+00:00")
                     ).date()
                 else:
-                    start_date = datetime.strptime(start_date_str, "%Y-%m-d").date()
+                    start_date = datetime.strptime(start_date_str, "%Y-%m-%d").date()
                 
                 if first_day_of_month <= start_date <= today:
                     unit_id = rental.get("unitId")
@@ -1391,12 +1363,14 @@ def contar_moveins_correcto(today=None):
                         unidades_movein.add(unit_id)
                     conteo_estados[rental_state] += 1
                     
-            except Exception:
+            except Exception as e:
+                logger.warning(f"Error parsing date {start_date_str}: {e}")
                 continue
         
         moveins_total = len(unidades_movein)
         
-        logger.info(f"MOVE-INS CORREGIDO: {moveins_total}")
+        logger.info(f"MOVE-INS CORREGIDO: {moveins_total} unidades")
+        logger.info(f"   Estados: {dict(conteo_estados)}")
         
         return moveins_total, conteo_estados, all_rentals
             
@@ -1405,69 +1379,81 @@ def contar_moveins_correcto(today=None):
         return 0, {}, []
 
 def contar_moveouts_corregido():
-    """
-    Función corregida que usa datos REALES de move-outs del caché
-    """
-    today = datetime.now(timezone.utc).date()
-    first_day_of_month = today.replace(day=1)
-    logger.info(f"\nCALCULANDO MOVE-OUTS CON DATOS REALES DESDE CACHÉ...")
-    all_rentals = GLOBAL_CACHE.get('all_rentals')
-    moveouts_total, moveouts_data = contar_moveouts_reales_api(all_rentals, today)
-    total_precio_move_out = 0
-    total_area_move_out = 0
-    unidades_con_datos = 0
-    
-    for rental in moveouts_data:
-        precio = _extract_price(rental)
-        if not precio or precio <= 0:
-            continue
-            
-        unit_data = rental.get("unit") or rental.get("data", {}).get("unit") or {}
-        area_m2 = compute_area_m2(unit_data)
-        if not area_m2 or area_m2 <= 0:
-            area_m2 = 10.0
+    try:
+        today = datetime.now(timezone.utc).date()
+        first_day_of_month = today.replace(day=1)
+        logger.info(f"CALCULANDO MOVE-OUTS CON DATOS REALES DESDE CACHE - CORREGIDO")
         
-        total_precio_move_out += precio
-        total_area_move_out += area_m2
-        unidades_con_datos += 1
-    
-    if unidades_con_datos > 0:
-        precio_promedio_m2_move_out = total_precio_move_out / total_area_move_out
-    else:
-        precio_promedio_m2_move_out = 19225.43 * 0.85
-    
-    logger.info(f"MOVE-OUTS REALES: {moveouts_total} unidades")
-    logger.info(f"   - Unidades con datos completos: {unidades_con_datos}")
-    logger.info(f"   - Precio promedio m²: {precio_promedio_m2_move_out:.2f}")
-    logger.info(f"   - Área total: {total_area_move_out:.2f} m²")
-    
-    return moveouts_total, {
-        "total_m2_move_out": round(total_area_move_out),
-        "unidades_move_out": moveouts_total,
-        "unidades_con_datos_completos": unidades_con_datos,
-        "precio_promedio_m2_move_out": round(precio_promedio_m2_move_out, 2)
-    }
-
-# ==============================================================
-# FUNCIONES CORREGIDAS PARA DATA_OCUPACIÓN
-# ==============================================================
+        all_rentals = GLOBAL_CACHE.get('all_rentals')
+        if not all_rentals:
+            logger.error("No hay rentals en cache")
+            return 0, {
+                "total_m2_move_out": 0,
+                "unidades_move_out": 0,
+                "unidades_con_datos_completos": 0,
+                "precio_promedio_m2_move_out": 0
+            }
+        
+        moveouts_total, moveouts_data = contar_moveouts_reales_api(all_rentals, today)
+        
+        total_precio_move_out = 0
+        total_area_move_out = 0
+        unidades_con_datos = 0
+        
+        for rental in moveouts_data:
+            precio = _extract_price(rental)
+            if not precio or precio <= 0:
+                continue
+                
+            unit_data = rental.get("unit") or rental.get("data", {}).get("unit") or {}
+            area_m2 = compute_area_m2(unit_data)
+            if not area_m2 or area_m2 <= 0:
+                area_m2 = 10.0
+            
+            total_precio_move_out += precio
+            total_area_move_out += area_m2
+            unidades_con_datos += 1
+        
+        if unidades_con_datos > 0:
+            precio_promedio_m2_move_out = total_precio_move_out / total_area_move_out
+        else:
+            precio_promedio_m2_move_out = 19225.43 * 0.85
+        
+        logger.info(f"MOVE-OUTS REALES: {moveouts_total} unidades")
+        logger.info(f"   - Unidades con datos completos: {unidades_con_datos}")
+        logger.info(f"   - Precio promedio m²: {precio_promedio_m2_move_out:.2f}")
+        logger.info(f"   - Area total: {total_area_move_out:.2f} m²")
+        
+        return moveouts_total, {
+            "total_m2_move_out": round(total_area_move_out),
+            "unidades_move_out": moveouts_total,
+            "unidades_con_datos_completos": unidades_con_datos,
+            "precio_promedio_m2_move_out": round(precio_promedio_m2_move_out, 2)
+        }
+        
+    except Exception as e:
+        logger.error(f"ERROR en contar_moveouts_corregido: {e}")
+        return 0, {
+            "total_m2_move_out": 0,
+            "unidades_move_out": 0,
+            "unidades_con_datos_completos": 0,
+            "precio_promedio_m2_move_out": 0
+        }
 
 def obtener_todos_los_sites_desde_cache():
-    """Obtiene TODOS los sites desde el caché"""
     try:
         all_sites = GLOBAL_CACHE.get('all_sites')
         if all_sites:
-            logger.info(f"Usando {len(all_sites)} sites del caché")
+            logger.info(f"Usando {len(all_sites)} sites del cache")
             return all_sites
         else:
-            logger.warning("No hay datos en caché, obteniendo directamente...")
+            logger.warning("No hay datos en cache, obteniendo directamente")
             return []
     except Exception as e:
-        logger.error(f"Error obteniendo sites desde caché: {e}")
+        logger.error(f"Error obteniendo sites desde cache: {e}")
         return []
 
 def obtener_reporte_site(site_id):
-    """Obtiene el último reporte de un site desde la API"""
     try:
         params = {"siteId": site_id, "limit": 1, "sort": "-created"}
         response = requests.get(f"{BASE_URL}/site-reports", headers=headers, params=params, timeout=30)
@@ -1488,7 +1474,6 @@ def obtener_reporte_site(site_id):
     return None
 
 def formatear_codigo_sucursal(codigo):
-    """Formatea código a KBxx"""
     if not codigo:
         return ""
     
@@ -1502,7 +1487,6 @@ def formatear_codigo_sucursal(codigo):
     return codigo
 
 def convertir_a_numero(valor):
-    """Convierte cualquier valor a número"""
     if valor is None:
         return 0.0
     
@@ -1524,12 +1508,8 @@ def convertir_a_numero(valor):
         return 0.0
 
 def calcular_ocupacion_real():
-    """Calcula la ocupación con datos REALES de la API - SOLO MUESTRA JSON FINAL"""
-    
-    # 1. Obtener todos los sites desde el caché
     todos_sites = obtener_todos_los_sites_desde_cache()
     
-    # Filtrar solo sites KB
     sites_kb = []
     for site in todos_sites:
         codigo = site.get("code", "")
@@ -1537,7 +1517,6 @@ def calcular_ocupacion_real():
             sites_kb.append(site)
     
     if not sites_kb:
-        # Si no hay sites KB, mostrar estructura vacía
         return {
             "fecha_ocupacion": datetime.now(timezone.utc).date().isoformat(),
             "total_m2": 0,
@@ -1547,7 +1526,6 @@ def calcular_ocupacion_real():
             "detalle_sucursales_ocupacion": []
         }
     
-    # 2. Procesar cada site KB
     datos_sucursales = {}
     
     for site in sites_kb:
@@ -1555,34 +1533,28 @@ def calcular_ocupacion_real():
         codigo_original = site.get("code", "")
         codigo = formatear_codigo_sucursal(codigo_original)
         
-        # Obtener reporte
         reporte = obtener_reporte_site(site_id)
         
         if not reporte:
             continue
         
-        # Extraer datos del área
         area_data = reporte.get("area", {})
         
         if not area_data or not isinstance(area_data, dict):
             continue
         
-        # Convertir valores
         available_api = convertir_a_numero(area_data.get("available"))
         occupied_api = convertir_a_numero(area_data.get("occupied"))
         
-        # Cálculo correcto: available(API) = TOTAL, disponible = total - ocupado
         total_area = available_api
         area_ocupada = occupied_api
         area_disponible = total_area - area_ocupada
         
-        # Calcular porcentaje
         if total_area > 0:
             porcentaje = (area_ocupada / total_area) * 100
         else:
             porcentaje = 0
         
-        # Guardar datos
         datos_sucursales[codigo] = {
             "area_construida": round(total_area),
             "area_arrendada": round(area_ocupada),
@@ -1592,7 +1564,6 @@ def calcular_ocupacion_real():
         
         time.sleep(0.1)
     
-    # 3. Calcular totales
     total_construida = sum(d["area_construida"] for d in datos_sucursales.values())
     total_arrendada = sum(d["area_arrendada"] for d in datos_sucursales.values())
     total_disponible = sum(d["area_disponible"] for d in datos_sucursales.values())
@@ -1602,7 +1573,6 @@ def calcular_ocupacion_real():
     else:
         porcentaje_total = 0
     
-    # 4. Preparar detalle ordenado
     detalle_sucursales = []
     for codigo in sorted(datos_sucursales.keys(), 
                        key=lambda x: (int(x[2:]) if x[2:].isdigit() else 999, x)):
@@ -1615,7 +1585,6 @@ def calcular_ocupacion_real():
             "porcentaje_ocupacion": d["porcentaje_ocupacion"]
         })
     
-    # 5. Crear estructura JSON final
     resultado = {
         "fecha_ocupacion": datetime.now(timezone.utc).date().isoformat(),
         "total_m2": total_construida,
@@ -1628,18 +1597,14 @@ def calcular_ocupacion_real():
     return resultado
 
 def calcular_porcentaje_ocupacion():
-    """
-    VERSIÓN DEFINITIVA CORREGIDA - Reemplaza la función original
-    Calcula correctamente la data_ocupacion usando site-reports
-    """
     try:
         today = datetime.now(timezone.utc).date()
         
         logger.info("="*70)
-        logger.info("CALCULANDO OCUPACIÓN DESDE SITE-REPORTS - CORREGIDA")
+        logger.info("CALCULANDO OCUPACION DESDE SITE-REPORTS - CORREGIDA")
         logger.info("="*70)
         
-        logger.info("Obteniendo datos desde site-reports...")
+        logger.info("Obteniendo datos desde site-reports")
         resultado = calcular_ocupacion_real()
         
         if not resultado or not resultado.get("detalle_sucursales_ocupacion"):
@@ -1655,27 +1620,26 @@ def calcular_porcentaje_ocupacion():
                 "detalle_sucursales_ocupacion": []
             }
         
-        # Log de resumen
-        logger.info("\nRESUMEN OCUPACIÓN CORREGIDA:")
-        logger.info(f"   Total área construida: {resultado['total_m2']:,.0f} m²")
-        logger.info(f"   Total área arrendada: {resultado['total_area_ocupada']:,.0f} m²")
-        logger.info(f"   Total área disponible: {resultado['total_area_disponible']:,.0f} m²")
-        logger.info(f"   Porcentaje ocupación: {resultado['porcentaje_ocupacion']:.2f}%")
+        logger.info(f"RESUMEN OCUPACION CORREGIDA:")
+        logger.info(f"   Total area construida: {resultado['total_m2']:,.0f} m²")
+        logger.info(f"   Total area arrendada: {resultado['total_area_ocupada']:,.0f} m²")
+        logger.info(f"   Total area disponible: {resultado['total_area_disponible']:,.0f} m²")
+        logger.info(f"   Porcentaje ocupacion: {resultado['porcentaje_ocupacion']:.2f}%")
         logger.info(f"   Sucursales incluidas: {len(resultado['detalle_sucursales_ocupacion'])}")
         
         if len(resultado['detalle_sucursales_ocupacion']) > 0:
-            logger.info("\nEjemplo de sucursales calculadas:")
+            logger.info(f"Ejemplo de sucursales calculadas:")
             for suc in resultado['detalle_sucursales_ocupacion'][:3]: 
                 logger.info(f"   {suc['sucursal']}: {suc['area_construida']} m², {suc['area_arrendada']} m² ({suc['porcentaje_ocupacion']}%)")
             
-            logger.info("\nÚltimas 3 sucursales:")
+            logger.info(f"Ultimas 3 sucursales:")
             for suc in resultado['detalle_sucursales_ocupacion'][-3:]:
                 logger.info(f"   {suc['sucursal']}: {suc['area_construida']} m², {suc['area_arrendada']} m² ({suc['porcentaje_ocupacion']}%)")
         
         return resultado
         
     except Exception as e:
-        logger.error(f"ERROR en cálculo de ocupación corregido: {str(e)}")
+        logger.error(f"ERROR en calculo de ocupacion corregido: {str(e)}")
         import traceback
         traceback.print_exc()
         today = datetime.now(timezone.utc).date()
@@ -1689,17 +1653,30 @@ def calcular_porcentaje_ocupacion():
         }
 
 def obtener_moveins_con_descuentos_por_sucursal_corregido(today, first_day_of_month):
-    """
-    FUNCIÓN CORREGIDA: Calcula porcentaje promedio de descuento por sucursal
-    Y ENVÍA LOS DATOS COMO DECIMALES (0.50 en lugar de 50.0)
-    """
     logger.info("="*70)
-    logger.info("🔍 CALCULANDO DESCUENTOS POR SUCURSAL - CORREGIDO")
+    logger.info("CALCULANDO DESCUENTOS POR SUCURSAL - CORREGIDO")
     logger.info("="*70)
     
     try:
         all_rentals = GLOBAL_CACHE.get('all_rentals')
         mapa_sucursales = GLOBAL_CACHE.get('mapa_sucursales')
+        
+        if not all_rentals:
+            logger.error("No hay rentals en cache")
+            return {
+                "success": False,
+                "fecha_inicio": first_day_of_month.isoformat(),
+                "fecha_fin": today.isoformat(),
+                "detalle_descuentos": [],
+                "resumen": {
+                    "sucursales_con_actividad": 0,
+                    "total_contratos": 0,
+                    "total_contratos_con_descuento": 0,
+                    "porcentaje_total_con_descuento": 0.0,
+                    "descuento_promedio_total": 0.0 
+                }
+            }
+        
         rentals_mes = []
         for rental in all_rentals:
             start_date_str = rental.get("startDate")
@@ -1715,12 +1692,13 @@ def obtener_moveins_con_descuentos_por_sucursal_corregido(today, first_day_of_mo
                 if "T" in start_date_str:
                     start_date = datetime.fromisoformat(start_date_str.replace("Z", "+00:00")).date()
                 else:
-                    start_date = datetime.strptime(start_date_str, "%Y-%m-d").date()
+                    start_date = datetime.strptime(start_date_str, "%Y-%m-%d").date()
                 
                 if first_day_of_month <= start_date <= today:
                     rentals_mes.append(rental)
                     
-            except Exception:
+            except Exception as e:
+                logger.warning(f"Error parsing date {start_date_str}: {e}")
                 continue
         
         logger.info(f"Total rentals del mes: {len(rentals_mes)}")
@@ -1796,10 +1774,10 @@ def obtener_moveins_con_descuentos_por_sucursal_corregido(today, first_day_of_mo
                     descuento_promedio_monto = sum(datos["montos_descuento"]) / len(datos["montos_descuento"])
                 
                 precio_promedio = sum(datos["precios_totales"]) / len(datos["precios_totales"]) if datos["precios_totales"] else 0
-                logger.info(f"🏢 {sucursal}: {datos['total_contratos']} contratos")
+                logger.info(f"{sucursal}: {datos['total_contratos']} contratos")
                 logger.info(f"   Contratos con descuento: {datos['contratos_con_descuento']}")
                 logger.info(f"   % contratos con descuento: {porcentaje_contratos_con_descuento:.1f}%")
-                logger.info(f"   Descuento promedio cálculo: {descuento_promedio_porcentaje:.1f}%")
+                logger.info(f"   Descuento promedio calculo: {descuento_promedio_porcentaje:.1f}%")
                 logger.info(f"   Descuento promedio enviado: {descuento_promedio_decimal:.4f} (DECIMAL para Power BI)")
                 logger.info(f"   Descuento promedio monto: ${descuento_promedio_monto:,.0f}")
                 logger.info(f"   Precio promedio: ${precio_promedio:,.0f}")
@@ -1830,14 +1808,14 @@ def obtener_moveins_con_descuentos_por_sucursal_corregido(today, first_day_of_mo
                 "descuento_promedio": round(descuento_prom_total_decimal, 4)
             })
             
-            logger.info(f"\nTOTAL GENERAL:")
+            logger.info(f"TOTAL GENERAL:")
             logger.info(f"   Contratos totales: {total_moveins}")
             logger.info(f"   Contratos con descuento: {total_con_descuento}")
             logger.info(f"   % contratos con descuento: {porcentaje_total_contratos_con_descuento:.1f}%")
-            logger.info(f"   Descuento promedio cálculo: {descuento_prom_total_porcentaje:.1f}%")
+            logger.info(f"   Descuento promedio calculo: {descuento_prom_total_porcentaje:.1f}%")
             logger.info(f"   Descuento promedio enviado: {descuento_prom_total_decimal:.4f}")
         
-        logger.info(f"Análisis de descuentos completado: {len(resultado_final)-1} sucursales")
+        logger.info(f"Analisis de descuentos completado: {len(resultado_final)-1} sucursales")
         
         return {
             "success": True,
@@ -1854,7 +1832,7 @@ def obtener_moveins_con_descuentos_por_sucursal_corregido(today, first_day_of_mo
         }
         
     except Exception as e:
-        logger.error(f"ERROR en análisis de descuentos: {str(e)}")
+        logger.error(f"ERROR en analisis de descuentos: {str(e)}")
         import traceback
         traceback.print_exc()
         
@@ -1877,10 +1855,7 @@ def obtener_moveins_con_descuentos_por_sucursal_corregido(today, first_day_of_mo
         }
 
 def calcular_metricas_por_sucursal_corregido():
-    """
-    Calcula métricas por sucursal usando datos del caché
-    """
-    logger.info("📊 Calculando métricas por sucursal desde caché...")
+    logger.info("Calculando metricas por sucursal desde cache - CORREGIDO")
     
     try:
         today = datetime.now(timezone.utc).date()
@@ -1888,6 +1863,11 @@ def calcular_metricas_por_sucursal_corregido():
         all_rentals = GLOBAL_CACHE.get('all_rentals')
         mapa_sucursales = GLOBAL_CACHE.get('mapa_sucursales')
         rentals_mes_actual = GLOBAL_CACHE.get('rentals_mes_actual')
+        
+        if not all_rentals or not mapa_sucursales:
+            logger.error("No hay datos en cache")
+            return []
+        
         sucursal_data = {}
         sucursales_kb = [f"KB{i:02d}" for i in range(1, 28)]
         
@@ -1903,13 +1883,21 @@ def calcular_metricas_por_sucursal_corregido():
                 "unidades_salida_ids": set()
             }
         
-        logger.info("Procesando move-ins por sucursal...")
+        logger.info("Procesando move-ins por sucursal")
         for rental in rentals_mes_actual:
-            start_date = parse_date_to_dateobj(rental.get("startDate"))
+            start_date_str = rental.get("startDate")
             rental_state = rental.get("state", "").lower()
             
-            if start_date and first_day_of_month <= start_date <= today:
-                if rental_state in ["occupied", "ended"]:
+            if not start_date_str or rental_state not in ["occupied", "ended"]:
+                continue
+            
+            try:
+                if "T" in start_date_str:
+                    start_date = datetime.fromisoformat(start_date_str.replace("Z", "+00:00")).date()
+                else:
+                    start_date = datetime.strptime(start_date_str, "%Y-%m-%d").date()
+                
+                if start_date and first_day_of_month <= start_date <= today:
                     unit_id = rental.get("unitId")
                     unit_data = rental.get("unit") or rental.get("data", {}).get("unit") or {}
                     site_id = unit_data.get("siteId")
@@ -1937,40 +1925,55 @@ def calcular_metricas_por_sucursal_corregido():
                                 sucursal_data[sucursal]["area_total_move_in"] += area_m2
                             else:
                                 sucursal_data[sucursal]["area_total_move_in"] += 10.0
+            except Exception as e:
+                logger.warning(f"Error procesando rental para move-in: {e}")
+                continue
         
-        logger.info("Procesando move-outs por sucursal...")
+        logger.info("Procesando move-outs por sucursal")
         for rental in all_rentals:
-            end_date = parse_date_to_dateobj(rental.get("endDate"))
+            end_date_str = rental.get("endDate")
             rental_state = rental.get("state", "").lower()
             
-            if rental_state == "ended" and end_date and first_day_of_month <= end_date <= today:
-                unit_id = rental.get("unitId")
-                unit_data = rental.get("unit") or rental.get("data", {}).get("unit") or {}
-                site_id = unit_data.get("siteId")
+            if rental_state != "ended" or not end_date_str:
+                continue
+            
+            try:
+                if "T" in end_date_str:
+                    end_date = datetime.fromisoformat(end_date_str.replace("Z", "+00:00")).date()
+                else:
+                    end_date = datetime.strptime(end_date_str, "%Y-%m-%d").date()
                 
-                sucursal = "GLOBAL"
-                if site_id:
-                    sucursal = mapa_sucursales.get(site_id, "GLOBAL")
-                
-                if sucursal == "GLOBAL":
-                    site_code = unit_data.get("code", "").lower()
-                    if site_code and site_code.startswith("kb"):
-                        sucursal = site_code.upper()[:4] if len(site_code) >= 4 else site_code.upper()
-                
-                if sucursal.startswith("KB") and sucursal in sucursal_data and unit_id:
-                    if unit_id not in sucursal_data[sucursal]["unidades_salida_ids"]:
-                        sucursal_data[sucursal]["unidades_salida"] += 1
-                        sucursal_data[sucursal]["unidades_salida_ids"].add(unit_id)
-                        
-                        precio = _extract_price(rental)
-                        area_m2 = compute_area_m2(unit_data)
-                        
-                        if precio and precio > 0:
-                            sucursal_data[sucursal]["precio_total_move_out"] += precio
-                        if area_m2 and area_m2 > 0:
-                            sucursal_data[sucursal]["area_total_move_out"] += area_m2
-                        else:
-                            sucursal_data[sucursal]["area_total_move_out"] += 10.0
+                if end_date and first_day_of_month <= end_date <= today:
+                    unit_id = rental.get("unitId")
+                    unit_data = rental.get("unit") or rental.get("data", {}).get("unit") or {}
+                    site_id = unit_data.get("siteId")
+                    
+                    sucursal = "GLOBAL"
+                    if site_id:
+                        sucursal = mapa_sucursales.get(site_id, "GLOBAL")
+                    
+                    if sucursal == "GLOBAL":
+                        site_code = unit_data.get("code", "").lower()
+                        if site_code and site_code.startswith("kb"):
+                            sucursal = site_code.upper()[:4] if len(site_code) >= 4 else site_code.upper()
+                    
+                    if sucursal.startswith("KB") and sucursal in sucursal_data and unit_id:
+                        if unit_id not in sucursal_data[sucursal]["unidades_salida_ids"]:
+                            sucursal_data[sucursal]["unidades_salida"] += 1
+                            sucursal_data[sucursal]["unidades_salida_ids"].add(unit_id)
+                            
+                            precio = _extract_price(rental)
+                            area_m2 = compute_area_m2(unit_data)
+                            
+                            if precio and precio > 0:
+                                sucursal_data[sucursal]["precio_total_move_out"] += precio
+                            if area_m2 and area_m2 > 0:
+                                sucursal_data[sucursal]["area_total_move_out"] += area_m2
+                            else:
+                                sucursal_data[sucursal]["area_total_move_out"] += 10.0
+            except Exception as e:
+                logger.warning(f"Error procesando rental para move-out: {e}")
+                continue
         
         detalle_sucursales = []
         
@@ -2017,7 +2020,7 @@ def calcular_metricas_por_sucursal_corregido():
                     "unidades_netas": unidades_netas
                 })
         
-        logger.info(f"Métricas por sucursal calculadas: {len(detalle_sucursales)} sucursales")
+        logger.info(f"Metricas por sucursal calculadas: {len(detalle_sucursales)} sucursales")
         return detalle_sucursales
         
     except Exception as e:
@@ -2026,10 +2029,14 @@ def calcular_metricas_por_sucursal_corregido():
 
 def calcular_metricas_seguros_corregido():
     try:
-        logger.info("CALCULANDO MÉTRICAS DE SEGUROS DESDE CACHÉ")
+        logger.info("CALCULANDO METRICAS DE SEGUROS DESDE CACHE - CORREGIDO")
         today = datetime.now(timezone.utc).date()
         first_day_current_month = today.replace(day=1)
         all_rentals = GLOBAL_CACHE.get('all_rentals')
+        
+        if not all_rentals:
+            logger.error("No hay rentals en cache")
+            return None
         
         rangos_uf = [
             {"uf": 100, "desde": 7000, "hasta": 8201},
@@ -2058,11 +2065,12 @@ def calcular_metricas_seguros_corregido():
                         start_date_str.replace("Z", "+00:00")
                     ).date()
                 else:
-                    start_date = datetime.strptime(start_date_str, "%Y-%m-d").date()
+                    start_date = datetime.strptime(start_date_str, "%Y-%m-%d").date()
                 
                 if first_day_current_month <= start_date <= today:
                     rentals_del_mes.append(rental)
-            except:
+            except Exception as e:
+                logger.warning(f"Error parsing date {start_date_str}: {e}")
                 continue
         
         unidades_movein = set()
@@ -2110,12 +2118,12 @@ def calcular_metricas_seguros_corregido():
         return resultado
             
     except Exception as e:
-        logger.error(f"Error calculando métricas seguros: {str(e)}")
+        logger.error(f"Error calculando metricas seguros: {str(e)}")
         return None
 
 def calcular_metricas_ocupacion_directa_cached():
     try:
-        logger.info("Calculando métricas de ocupación directa desde caché...")
+        logger.info("Calculando metricas de ocupacion directa desde cache")
         all_units = GLOBAL_CACHE.get('all_units')
         area_total = 0
         area_ocupada = 0
@@ -2144,7 +2152,7 @@ def calcular_metricas_ocupacion_directa_cached():
         }
         
     except Exception as e:
-        logger.error(f"Error calculando métricas de ocupación directa: {str(e)}")
+        logger.error(f"Error calculando metricas de ocupacion directa: {str(e)}")
         return {
             "total_m2": 131615.95,
             "total_area_ocupada": 73391,  
@@ -2200,7 +2208,7 @@ def obtener_json_diario_6_meses():
             "tipo": "datos_flex"
         }
 
-        logger.info(f"Datos diarios FLEX obtenidos: {len(detalle_diario)} días")
+        logger.info(f"Datos diarios FLEX obtenidos: {len(detalle_diario)} dias")
         return resultado_json
 
     except Exception as e:
@@ -2211,29 +2219,18 @@ def obtener_json_diario_6_meses():
         if 'connection' in locals():
             connection.close()
 
-# ==============================================================
-# NUEVA FUNCIÓN PARA CALCULAR VENTAS DIARIAS
-# ==============================================================
-
 def calcular_ventas_diarias():
-    """
-    Calcula ventas diarias del mes actual usando el caché global
-    Retorna: {"data_ventas_diarias": {...}}
-    """
     try:
-        logger.info("📈 CALCULANDO VENTAS DIARIAS DEL MES ACTUAL")
+        logger.info("CALCULANDO VENTAS DIARIAS DEL MES ACTUAL")
         logger.info("="*60)
         
-        # Obtener datos del caché
         all_rentals = GLOBAL_CACHE.get('all_rentals')
         all_jobs = GLOBAL_CACHE.get('all_jobs')
         all_units = GLOBAL_CACHE.get('all_units')
         
-        # Variables para depuración
         codigos_encontrados = set()
         flex_encontrados = set()
         
-        # Estructura para ventas diarias (regular y flex)
         ventas_diarias = defaultdict(lambda: {
             "move_in_unidades": 0,
             "move_in_m2": 0.0,
@@ -2241,7 +2238,6 @@ def calcular_ventas_diarias():
             "move_out_m2": 0.0,
             "unidades_move_in_ids": set(),
             "unidades_move_out_ids": set(),
-            # Estructura para flex
             "move_in_unidades_flex": 0,
             "move_in_m2_flex": 0.0,
             "move_out_unidades_flex": 0,
@@ -2250,35 +2246,27 @@ def calcular_ventas_diarias():
             "unidades_move_out_ids_flex": set()
         })
         
-        # Fechas del mes actual
         today = datetime.now(timezone.utc).date()
         first_day_of_month = today.replace(day=1)
         
-        # Función auxiliar para procesar una unidad
         def procesar_unidad(fecha, unit_id, unit_data, es_move_in=True, es_move_out=False, fuente=""):
-            """Procesa una unidad y la clasifica como regular o flex"""
             if not unit_id:
                 return
             
-            # Obtener código de la unidad
             unit_code = unit_data.get("code") or unit_data.get("unitCode") or unit_data.get("name") or ""
             
-            # Guardar para depuración
             if unit_code:
                 codigos_encontrados.add(unit_code)
             
-            # Determinar si es flex
             es_flex = es_unidad_flex(unit_code)
             
             if es_flex and unit_code:
                 flex_encontrados.add(f"{unit_code} (fuente: {fuente})")
             
-            # Calcular área
             area_m2 = compute_area_m2(unit_data)
             if not area_m2 or area_m2 <= 0:
                 area_m2 = 10.0
             
-            # Procesar según el tipo de movimiento
             if es_move_in:
                 if unit_id not in ventas_diarias[fecha]["unidades_move_in_ids"]:
                     ventas_diarias[fecha]["move_in_unidades"] += 1
@@ -2301,8 +2289,7 @@ def calcular_ventas_diarias():
                         ventas_diarias[fecha]["move_out_m2_flex"] += area_m2
                         ventas_diarias[fecha]["unidades_move_out_ids_flex"].add(unit_id)
         
-        # PROCESAR MOVE-INS desde rentals
-        logger.info("Procesando move-ins desde rentals...")
+        logger.info("Procesando move-ins desde rentals")
         for rental in all_rentals:
             start_date_str = rental.get("startDate")
             rental_state = rental.get("state", "").lower()
@@ -2322,8 +2309,7 @@ def calcular_ventas_diarias():
             
             procesar_unidad(start_date, unit_id, unit_data, es_move_in=True, fuente="rental-movein")
         
-        # PROCESAR MOVE-OUTS desde rentals
-        logger.info("Procesando move-outs desde rentals...")
+        logger.info("Procesando move-outs desde rentals")
         for rental in all_rentals:
             end_date = parse_date_to_dateobj(rental.get("endDate"))
             rental_state = rental.get("state", "").lower()
@@ -2334,8 +2320,7 @@ def calcular_ventas_diarias():
                 
                 procesar_unidad(end_date, unit_id, unit_data, es_move_in=False, es_move_out=True, fuente="rental-moveout")
         
-        # COMPLEMENTAR CON JOBS
-        logger.info("Complementando con jobs...")
+        logger.info("Complementando con jobs")
         for job in all_jobs:
             job_type = job.get("type", "").lower()
             created_date_str = job.get("created")
@@ -2358,8 +2343,7 @@ def calcular_ventas_diarias():
             elif job_type == "unit_moveout":
                 procesar_unidad(created_date, unit_id, unit_data, es_move_in=False, es_move_out=True, fuente="job-moveout")
         
-        # COMPLEMENTAR CON UNITS
-        logger.info("Complementando con units...")
+        logger.info("Complementando con units")
         for unit in all_units:
             created_date_str = unit.get("created")
             
@@ -2378,8 +2362,6 @@ def calcular_ventas_diarias():
             
             procesar_unidad(created_date, unit_id, unit, es_move_in=True, fuente="unit-creation")
         
-        # FORMATEAR RESULTADOS EN LA ESTRUCTURA SOLICITADA
-        # Ordenar fechas de más reciente a más antigua
         fechas_ordenadas = sorted(ventas_diarias.keys(), reverse=True)
         
         detalle_ventas_diarias = []
@@ -2388,15 +2370,12 @@ def calcular_ventas_diarias():
         for fecha in fechas_ordenadas:
             datos = ventas_diarias[fecha]
             
-            # Calcular netos para unidades regulares
             neto_diario = datos["move_in_unidades"] - datos["move_out_unidades"]
             neto_diario_mt2 = datos["move_in_m2"] - datos["move_out_m2"]
             
-            # Calcular netos para unidades flex
             neto_diario_flex = datos["move_in_unidades_flex"] - datos["move_out_unidades_flex"]
             neto_diario_mt2_flex = datos["move_in_m2_flex"] - datos["move_out_m2_flex"]
             
-            # Agregar al detalle regular
             detalle_ventas_diarias.append({
                 "fecha": fecha.isoformat(),
                 "diario_move_in": datos["move_in_unidades"],
@@ -2407,7 +2386,6 @@ def calcular_ventas_diarias():
                 "neto_diario_mt2": round(neto_diario_mt2, 2)
             })
             
-            # Agregar al detalle flex (solo si hay actividad flex)
             if (datos["move_in_unidades_flex"] > 0 or datos["move_out_unidades_flex"] > 0):
                 detalle_ventas_diarias_flex.append({
                     "fecha": fecha.isoformat(),
@@ -2419,29 +2397,26 @@ def calcular_ventas_diarias():
                     "neto_diario_mt2_flex": round(neto_diario_mt2_flex, 2)
                 })
         
-        # Crear estructura final
         data_ventas_diarias = {
             "fecha_ventas_diarias": f"{first_day_of_month} al {today}",
             "detalle_ventas_diarias": detalle_ventas_diarias
         }
         
-        # Agregar detalle flex solo si hay datos
         if detalle_ventas_diarias_flex:
             data_ventas_diarias["detalle_ventas_diarias_flex"] = detalle_ventas_diarias_flex
         
-        # DEBUG: Mostrar información de depuración
-        logger.info(f"\nINFORMACIÓN DE DEPURACIÓN VENTAS DIARIAS:")
-        logger.info(f"Códigos encontrados (primeros 30): {sorted(list(codigos_encontrados))[:30]}")
+        logger.info(f"INFORMACION DE DEPURACION VENTAS DIARIAS:")
+        logger.info(f"Codigos encontrados (primeros 30): {sorted(list(codigos_encontrados))[:30]}")
         logger.info(f"Flex encontrados ({len(flex_encontrados)}):")
-        for flex in sorted(flex_encontrados)[:10]:  # Mostrar solo los primeros 10
+        for flex in sorted(flex_encontrados)[:10]:
             logger.info(f"  {flex}")
-        logger.info(f"Total códigos analizados: {len(codigos_encontrados)}")
+        logger.info(f"Total codigos analizados: {len(codigos_encontrados)}")
         logger.info(f"Total flex detectados: {len(flex_encontrados)}")
         
-        logger.info(f"\nRESUMEN VENTAS DIARIAS:")
-        logger.info(f"  Período: {first_day_of_month} a {today}")
-        logger.info(f"  Días con actividad: {len(detalle_ventas_diarias)}")
-        logger.info(f"  Días con actividad FLEX: {len(detalle_ventas_diarias_flex) if detalle_ventas_diarias_flex else 0}")
+        logger.info(f"RESUMEN VENTAS DIARIAS:")
+        logger.info(f"  Periodo: {first_day_of_month} a {today}")
+        logger.info(f"  Dias con actividad: {len(detalle_ventas_diarias)}")
+        logger.info(f"  Dias con actividad FLEX: {len(detalle_ventas_diarias_flex) if detalle_ventas_diarias_flex else 0}")
         
         if detalle_ventas_diarias:
             total_move_in = sum(item["diario_move_in"] for item in detalle_ventas_diarias)
@@ -2457,7 +2432,7 @@ def calcular_ventas_diarias():
         }
         
     except Exception as e:
-        logger.error(f"ERROR en cálculo de ventas diarias: {str(e)}")
+        logger.error(f"ERROR en calculo de ventas diarias: {str(e)}")
         import traceback
         traceback.print_exc()
         
@@ -2473,31 +2448,17 @@ def calcular_ventas_diarias():
             }
         }
 
-# ==============================================================
-# FUNCIÓN PARA CALCULAR MÉTRICAS DE TAMAÑO Y VALOR
-# ==============================================================
-
 def calcular_metricas_tamaño_valor_sucursal():
-    """
-    Obtiene métricas de tamaño y valor por sucursal usando el caché global
-    Retorna: {
-        "data_tamaño_promedio": {...},
-        "data_valor_promedio": {...}
-    }
-    """
     try:
-        logger.info("📐 CALCULANDO MÉTRICAS DE TAMAÑO Y VALOR POR SUCURSAL")
+        logger.info("CALCULANDO METRICAS DE TAMAÑO Y VALOR POR SUCURSAL")
         logger.info("="*60)
         
-        # Obtener datos del caché
         all_rentals = GLOBAL_CACHE.get('all_rentals')
         mapa_sucursales = GLOBAL_CACHE.get('mapa_sucursales')
         
-        # Fechas actuales
         today = datetime.now(timezone.utc).date()
         first_day_of_month = today.replace(day=1)
         
-        # Inicializar estructura para recopilar datos por sucursal
         sucursal_data = defaultdict(lambda: {
             "unidades_entrada": 0,
             "unidades_salida": 0,
@@ -2509,13 +2470,11 @@ def calcular_metricas_tamaño_valor_sucursal():
             "unidades_salida_ids": set()
         })
         
-        logger.info("Procesando move-ins...")
-        # Procesar move-ins del mes actual
+        logger.info("Procesando move-ins")
         for rental in all_rentals:
             start_date_str = rental.get("startDate")
             rental_state = rental.get("state", "").lower()
             
-            # Solo considerar rentals occupied o ended
             if rental_state not in ["occupied", "ended"] or not start_date_str:
                 continue
             
@@ -2527,14 +2486,12 @@ def calcular_metricas_tamaño_valor_sucursal():
             unit_data = rental.get("unit") or rental.get("data", {}).get("unit") or {}
             site_id = unit_data.get("siteId")
             
-            # Determinar sucursal
             sucursal = mapa_sucursales.get(site_id, "GLOBAL")
             if sucursal == "GLOBAL":
                 site_code = unit_data.get("code", "").lower()
                 if site_code and site_code.startswith("kb"):
                     sucursal = site_code.upper()[:4] if len(site_code) >= 4 else site_code.upper()
             
-            # Solo procesar sucursales KB
             if sucursal.startswith("KB") and unit_id:
                 if unit_id not in sucursal_data[sucursal]["unidades_entrada_ids"]:
                     sucursal_data[sucursal]["unidades_entrada"] += 1
@@ -2550,8 +2507,7 @@ def calcular_metricas_tamaño_valor_sucursal():
                     else:
                         sucursal_data[sucursal]["area_total_move_in"] += 10.0
         
-        logger.info("Procesando move-outs...")
-        # Procesar move-outs del mes actual
+        logger.info("Procesando move-outs")
         for rental in all_rentals:
             end_date = parse_date_to_dateobj(rental.get("endDate"))
             rental_state = rental.get("state", "").lower()
@@ -2566,14 +2522,12 @@ def calcular_metricas_tamaño_valor_sucursal():
             unit_data = rental.get("unit") or rental.get("data", {}).get("unit") or {}
             site_id = unit_data.get("siteId")
             
-            # Determinar sucursal
             sucursal = mapa_sucursales.get(site_id, "GLOBAL")
             if sucursal == "GLOBAL":
                 site_code = unit_data.get("code", "").lower()
                 if site_code and site_code.startswith("kb"):
                     sucursal = site_code.upper()[:4] if len(site_code) >= 4 else site_code.upper()
             
-            # Solo procesar sucursales KB
             if sucursal.startswith("KB") and unit_id:
                 if unit_id not in sucursal_data[sucursal]["unidades_salida_ids"]:
                     sucursal_data[sucursal]["unidades_salida"] += 1
@@ -2589,43 +2543,35 @@ def calcular_metricas_tamaño_valor_sucursal():
                     else:
                         sucursal_data[sucursal]["area_total_move_out"] += 10.0
         
-        # Preparar resultados para tamaño promedio
         resultado_tamano = {
             "fecha_ocupacion": f"{first_day_of_month} al {today}",
             "detalle_sucursales_tamano": []
         }
         
-        # Preparar resultados para valor promedio
         resultado_valor = {
             "fecha_ocupacion": f"{first_day_of_month} al {today}",
             "detalle_sucursales_valor": []
         }
         
-        # Ordenar sucursales
         sucursales_ordenadas = sorted(
             [s for s in sucursal_data.keys() if s.startswith("KB")],
             key=lambda x: int(x[2:]) if x[2:].isdigit() else 999
         )
         
-        logger.info(f"Calculando métricas para {len(sucursales_ordenadas)} sucursales...")
+        logger.info(f"Calculando metricas para {len(sucursales_ordenadas)} sucursales")
         
         for sucursal in sucursales_ordenadas:
             datos = sucursal_data[sucursal]
             
-            # Solo incluir sucursales con actividad
             if datos["unidades_entrada"] == 0 and datos["unidades_salida"] == 0:
                 continue
             
-            # ========== CÁLCULO DE TAMAÑO PROMEDIO ==========
-            # Tamaño promedio move-in
             tamaño_movein = (datos["area_total_move_in"] / datos["unidades_entrada"] 
                             if datos["unidades_entrada"] > 0 else 0)
             
-            # Tamaño promedio move-out
             tamaño_moveout = (datos["area_total_move_out"] / datos["unidades_salida"] 
                              if datos["unidades_salida"] > 0 else 0)
             
-            # Tamaño neto (promedio)
             tamaño_neto = tamaño_movein - tamaño_moveout
             
             resultado_tamano["detalle_sucursales_tamano"].append({
@@ -2635,16 +2581,12 @@ def calcular_metricas_tamaño_valor_sucursal():
                 "neto": round(tamaño_neto, 2)
             })
             
-            # ========== CÁLCULO DE VALOR PROMEDIO POR M² ==========
-            # Valor promedio por m² move-in
             valor_movein_m2 = (datos["precio_total_move_in"] / datos["area_total_move_in"] 
                               if datos["area_total_move_in"] > 0 else 0)
             
-            # Valor promedio por m² move-out
             valor_moveout_m2 = (datos["precio_total_move_out"] / datos["area_total_move_out"] 
                                if datos["area_total_move_out"] > 0 else 0)
             
-            # Valor neto por m² (promedio)
             valor_neto_m2 = valor_movein_m2 - valor_moveout_m2
             
             resultado_valor["detalle_sucursales_valor"].append({
@@ -2656,7 +2598,7 @@ def calcular_metricas_tamaño_valor_sucursal():
             
             logger.info(f"  {sucursal}: Tamaño IN={tamaño_movein:.1f}m², OUT={tamaño_moveout:.1f}m² | Valor IN=${valor_movein_m2:,.0f}, OUT=${valor_moveout_m2:,.0f}")
         
-        logger.info(f"✅ Métricas calculadas: {len(resultado_tamano['detalle_sucursales_tamano'])} sucursales con actividad")
+        logger.info(f"Metricas calculadas: {len(resultado_tamano['detalle_sucursales_tamano'])} sucursales con actividad")
         
         return {
             "data_tamano_promedio": resultado_tamano,
@@ -2664,14 +2606,13 @@ def calcular_metricas_tamaño_valor_sucursal():
         }
         
     except Exception as e:
-        logger.error(f"ERROR en cálculo de métricas tamaño/valor: {str(e)}")
+        logger.error(f"ERROR en calculo de metricas tamaño/valor: {str(e)}")
         import traceback
         traceback.print_exc()
         
         today = datetime.now(timezone.utc).date()
         first_day_of_month = today.replace(day=1)
         
-        # Retornar estructura vacía en caso de error
         return {
             "data_tamano_promedio": {
                 "fecha_ocupacion": f"{first_day_of_month} al {today}",
@@ -2684,24 +2625,15 @@ def calcular_metricas_tamaño_valor_sucursal():
             "error": str(e)
         }
 
-# ==============================================================
-# NUEVA FUNCIÓN PARA OBTENER REPORTES DE AYER/HOY
-# ==============================================================
-
 def obtener_reportes_ayer_hoy_integrado():
-    """
-    Obtiene reportes de ayer/hoy desde el caché global
-    Retorna la estructura completa de reportes
-    """
     try:
-        logger.info("📊 OBTENIENDO REPORTES DE AYER/HOY DESDE CACHÉ")
+        logger.info("OBTENIENDO REPORTES DE AYER/HOY DESDE CACHE")
         logger.info("="*60)
         
-        # Obtener datos del caché (ya calculados durante la inicialización)
         reportes_ayer_hoy = GLOBAL_CACHE.get('reportes_ayer_hoy')
         
         if not reportes_ayer_hoy:
-            logger.warning("No se encontraron reportes de ayer/hoy en caché")
+            logger.warning("No se encontraron reportes de ayer/hoy en cache")
             return {
                 "data_moveins": {
                     "fecha_moveins": "",
@@ -2719,9 +2651,8 @@ def obtener_reportes_ayer_hoy_integrado():
                 }
             }
         
-        logger.info(f"✅ Reportes obtenidos: Move-ins={reportes_ayer_hoy['data_moveins']['total_unidades']}, Move-outs={reportes_ayer_hoy['data_moveouts']['total_unidades']}")
+        logger.info(f"Reportes obtenidos: Move-ins={reportes_ayer_hoy['data_moveins']['total_unidades']}, Move-outs={reportes_ayer_hoy['data_moveouts']['total_unidades']}")
         
-        # Log de resumen
         if reportes_ayer_hoy['data_moveins']['total_unidades'] > 0:
             logger.info(f"RESUMEN MOVE-INS:")
             for detalle in reportes_ayer_hoy['data_moveins']['detalle_moveins_diarios']:
@@ -2759,96 +2690,41 @@ def obtener_reportes_ayer_hoy_integrado():
             }
         }
 
-# ==============================================================
-# NUEVA FUNCIÓN: CALCULAR RESUMEN POR SUCURSAL
-# ==============================================================
-
 def calcular_resumen_sucursal():
-    """
-    Calcula el resumen por sucursal con todos los datos necesarios:
-    - sucursal
-    - fecha (hoy)
-    - fecha_apertura (del site)
-    - cantidad_neta_diaria (neto unidades hoy)
-    - m2_neto_diario (neto m² hoy)
-    - promedio_m2_diario (promedio m² por unidad hoy)
-    - cantidad_neta_mes (neto unidades mes)
-    - m2_neto_mes (neto m² mes)
-    - promedio_m2_mes (promedio m² por unidad mes)
-    - cantidad_neta_apertura (acumulado desde apertura - estimado)
-    - m2_neto_apertura (acumulado m² desde apertura - estimado)
-    - promedio_m2_apertura (promedio m² por unidad desde apertura)
-    - area_disponible (del site report)
-    - porcentaje_de_ocupacion (del site report)
-    """
     try:
-        logger.info("🏢 CALCULANDO RESUMEN POR SUCURSAL")
+        logger.info("CALCULANDO RESUMEN POR SUCURSAL")
         logger.info("="*60)
         
-        # Obtener datos del caché
         today = datetime.now(timezone.utc).date()
         first_day_of_month = today.replace(day=1)
         
-        # Obtener datos de ocupación para área disponible y porcentaje
         datos_ocupacion = calcular_porcentaje_ocupacion()
+        if not datos_ocupacion or not datos_ocupacion.get("detalle_sucursales_ocupacion"):
+            logger.warning("No hay datos de ocupacion disponibles")
+            return {}
+        
         ocupacion_por_sucursal = {}
-        if datos_ocupacion and datos_ocupacion.get("detalle_sucursales_ocupacion"):
-            for suc in datos_ocupacion["detalle_sucursales_ocupacion"]:
-                ocupacion_por_sucursal[suc["sucursal"]] = {
-                    "area_disponible": suc.get("area_disponible", 0),
-                    "porcentaje_ocupacion": suc.get("porcentaje_ocupacion", 0),
+        for suc in datos_ocupacion["detalle_sucursales_ocupacion"]:
+            sucursal = suc.get("sucursal")
+            if sucursal:
+                ocupacion_por_sucursal[sucursal] = {
                     "area_construida": suc.get("area_construida", 0),
-                    "area_arrendada": suc.get("area_arrendada", 0)
+                    "area_arrendada": suc.get("area_arrendada", 0),
+                    "area_disponible": suc.get("area_disponible", 0),
+                    "porcentaje_ocupacion": suc.get("porcentaje_ocupacion", 0)
                 }
         
-        # Obtener datos de ventas diarias para métricas del día
-        ventas_diarias_result = calcular_ventas_diarias()
-        ventas_diarias_por_sucursal = {}
-        if ventas_diarias_result.get("success") and ventas_diarias_result.get("data_ventas_diarias", {}).get("detalle_ventas_diarias"):
-            # Aquí necesitaríamos procesar las ventas diarias por sucursal
-            # Por ahora, usaremos datos de otras funciones
+        metricas_mes = calcular_metricas_por_sucursal_corregido()
         
-        # Obtener datos del mes actual por sucursal
-            metricas_sucursal_mes = calcular_metricas_por_sucursal_corregido()
+        metricas_por_sucursal = {}
+        for metrica in (metricas_mes or []):
+            sucursal = metrica.get("sucursal")
+            if sucursal:
+                metricas_por_sucursal[sucursal] = metrica
         
-        # Obtener info de sites para fecha_apertura
+        mapa_sucursales = GLOBAL_CACHE.get('mapa_sucursales')
         info_sucursales = GLOBAL_CACHE.get('info_sucursales')
         
-        # Obtener rentals para calcular acumulados históricos
-        all_rentals = GLOBAL_CACHE.get('all_rentals')
-        mapa_sucursales = GLOBAL_CACHE.get('mapa_sucursales')
-        
-        # Inicializar estructura para acumulados históricos por sucursal
-        historico_por_sucursal = defaultdict(lambda: {
-            "unidades_totales": 0,
-            "m2_totales": 0.0,
-            "unidades_ids": set()
-        })
-        
-        # Calcular acumulados históricos (aproximados)
-        logger.info("Calculando acumulados históricos por sucursal...")
-        for rental in all_rentals:
-            unit_id = rental.get("unitId")
-            if not unit_id:
-                continue
-                
-            unit_data = rental.get("unit") or rental.get("data", {}).get("unit") or {}
-            site_id = unit_data.get("siteId")
-            
-            if site_id in mapa_sucursales:
-                sucursal = mapa_sucursales[site_id]
-                if unit_id not in historico_por_sucursal[sucursal]["unidades_ids"]:
-                    historico_por_sucursal[sucursal]["unidades_totales"] += 1
-                    historico_por_sucursal[sucursal]["unidades_ids"].add(unit_id)
-                    
-                    area_m2 = compute_area_m2(unit_data)
-                    if area_m2 and area_m2 > 0:
-                        historico_por_sucursal[sucursal]["m2_totales"] += area_m2
-                    else:
-                        historico_por_sucursal[sucursal]["m2_totales"] += 10.0
-        
-        # Calcular datos del día (de ayer/hoy)
-        reportes_ayer_hoy = obtener_reportes_ayer_hoy_integrado()
         movimientos_hoy_por_sucursal = defaultdict(lambda: {
             "move_in_unidades": 0,
             "move_in_m2": 0.0,
@@ -2856,71 +2732,190 @@ def calcular_resumen_sucursal():
             "move_out_m2": 0.0
         })
         
-        # Procesar move-ins de hoy
+        total_moveins_hoy = 0
+        total_moveouts_hoy = 0
+        
+        logger.info(f"Buscando movimientos de HOY ({today}) en reportes de ayer/hoy")
+        reportes_ayer_hoy = obtener_reportes_ayer_hoy_integrado()
+        
+        mapa_site_id_a_sucursal = {}
+        for site_id, sucursal in mapa_sucursales.items():
+            mapa_site_id_a_sucursal[str(site_id)] = sucursal
+        
         for movimiento in reportes_ayer_hoy.get("data_moveins", {}).get("detalle_completo_unidades", []):
-            # Extraer sucursal del site_code
-            site_code = movimiento.get("site_code", "")
-            if site_code.startswith("KB"):
-                sucursal = site_code[:4] if len(site_code) >= 4 else site_code
-                movimientos_hoy_por_sucursal[sucursal]["move_in_unidades"] += 1
-                movimientos_hoy_por_sucursal[sucursal]["move_in_m2"] += movimiento.get("m2", 10.0)
+            site_code = str(movimiento.get("site_code", "")).strip()
+            fecha_str = movimiento.get("fecha", "")
+            
+            if fecha_str == today.isoformat():
+                sucursal = obtener_sucursal_desde_site_code(site_code, mapa_site_id_a_sucursal, info_sucursales)
+                if sucursal and sucursal.startswith("KB"):
+                    movimientos_hoy_por_sucursal[sucursal]["move_in_unidades"] += 1
+                    movimientos_hoy_por_sucursal[sucursal]["move_in_m2"] += movimiento.get("m2", 10.0)
+                    total_moveins_hoy += 1
         
-        # Procesar move-outs de hoy
         for movimiento in reportes_ayer_hoy.get("data_moveouts", {}).get("detalle_completo_unidades", []):
-            # Extraer sucursal del site_code
-            site_code = movimiento.get("site_code", "")
-            if site_code.startswith("KB"):
-                sucursal = site_code[:4] if len(site_code) >= 4 else site_code
-                movimientos_hoy_por_sucursal[sucursal]["move_out_unidades"] += 1
-                movimientos_hoy_por_sucursal[sucursal]["move_out_m2"] += movimiento.get("m2", 10.0)
+            site_code = str(movimiento.get("site_code", "")).strip()
+            fecha_str = movimiento.get("fecha", "")
+            
+            if fecha_str == today.isoformat():
+                sucursal = obtener_sucursal_desde_site_code(site_code, mapa_site_id_a_sucursal, info_sucursales)
+                if sucursal and sucursal.startswith("KB"):
+                    movimientos_hoy_por_sucursal[sucursal]["move_out_unidades"] += 1
+                    movimientos_hoy_por_sucursal[sucursal]["move_out_m2"] += movimiento.get("m2", 10.0)
+                    total_moveouts_hoy += 1
         
-        # Construir el resultado final
-        resultado = []
+        logger.info(f"Buscando rentals con fechas HOY ({today})")
+        all_rentals = GLOBAL_CACHE.get('all_rentals')
         
-        # Ordenar sucursales
-        sucursales_activas = set()
-        sucursales_activas.update(ocupacion_por_sucursal.keys())
-        sucursales_activas.update([m["sucursal"] for m in metricas_sucursal_mes])
+        if all_rentals:
+            rentals_hoy_mapeados = 0
+            for rental in all_rentals:
+                start_date_str = rental.get("startDate")
+                rental_state = rental.get("state", "").lower()
+                
+                if start_date_str and rental_state in ["occupied", "ended"]:
+                    start_date = parse_date_to_dateobj(start_date_str)
+                    if start_date and start_date == today:
+                        unit_id = rental.get("unitId")
+                        unit_data = rental.get("unit") or {}
+                        site_id = unit_data.get("siteId")
+                        
+                        if site_id and str(site_id) in mapa_site_id_a_sucursal:
+                            sucursal = mapa_site_id_a_sucursal[str(site_id)]
+                            if sucursal.startswith("KB"):
+                                movimientos_hoy_por_sucursal[sucursal]["move_in_unidades"] += 1
+                                
+                                area_m2 = compute_area_m2(unit_data)
+                                if not area_m2 or area_m2 <= 0:
+                                    area_m2 = 10.0
+                                
+                                movimientos_hoy_por_sucursal[sucursal]["move_in_m2"] += area_m2
+                                total_moveins_hoy += 1
+                                rentals_hoy_mapeados += 1
+                
+                end_date_str = rental.get("endDate")
+                if end_date_str and rental_state == "ended":
+                    end_date = parse_date_to_dateobj(end_date_str)
+                    if end_date and end_date == today:
+                        unit_id = rental.get("unitId")
+                        unit_data = rental.get("unit") or {}
+                        site_id = unit_data.get("siteId")
+                        
+                        if site_id and str(site_id) in mapa_site_id_a_sucursal:
+                            sucursal = mapa_site_id_a_sucursal[str(site_id)]
+                            if sucursal.startswith("KB"):
+                                movimientos_hoy_por_sucursal[sucursal]["move_out_unidades"] += 1
+                                
+                                area_m2 = compute_area_m2(unit_data)
+                                if not area_m2 or area_m2 <= 0:
+                                    area_m2 = 10.0
+                                
+                                movimientos_hoy_por_sucursal[sucursal]["move_out_m2"] += area_m2
+                                total_moveouts_hoy += 1
+                                rentals_hoy_mapeados += 1
+            
+            logger.info(f"   Rentals mapeados de hoy: {rentals_hoy_mapeados}")
         
-        for sucursal in sorted(sucursales_activas, key=lambda x: int(x[2:]) if x[2:].isdigit() else 999):
-            # Obtener datos de ocupación
+        logger.info("Consultando ventas diarias")
+        try:
+            ventas_diarias_result = calcular_ventas_diarias()
+            if ventas_diarias_result.get("success"):
+                ventas_data = ventas_diarias_result.get("data_ventas_diarias", {})
+                detalle_ventas = ventas_data.get("detalle_ventas_diarias", [])
+                
+                for venta in detalle_ventas:
+                    if venta.get("fecha") == today.isoformat():
+                        if venta.get("diario_move_in", 0) > 0 or venta.get("diario_move_out", 0) > 0:
+                            logger.info(f"   Ventas diarias reportan actividad hoy: IN={venta.get('diario_move_in', 0)}, OUT={venta.get('diario_move_out', 0)}")
+                            break
+        except Exception as e:
+            logger.warning(f"   Error consultando ventas diarias: {e}")
+        
+        logger.info(f"RESULTADO BUSQUEDA MOVIMIENTOS HOY ({today}):")
+        logger.info(f"   Total move-ins encontrados: {total_moveins_hoy}")
+        logger.info(f"   Total move-outs encontrados: {total_moveouts_hoy}")
+        logger.info(f"   Sucursales con actividad hoy: {len(movimientos_hoy_por_sucursal)}")
+        
+        if movimientos_hoy_por_sucursal:
+            logger.info("   Detalle por sucursal:")
+            for sucursal, datos in sorted(movimientos_hoy_por_sucursal.items()):
+                if datos["move_in_unidades"] > 0 or datos["move_out_unidades"] > 0:
+                    logger.info(f"     {sucursal}: IN={datos['move_in_unidades']}, OUT={datos['move_out_unidades']}, m2 IN={datos['move_in_m2']:.1f}, m2 OUT={datos['move_out_m2']:.1f}")
+        else:
+            logger.info("   No se encontraron movimientos para hoy en ninguna sucursal")
+        
+        logger.info("Calculando datos historicos acumulados")
+        historico_por_sucursal = defaultdict(lambda: {
+            "unidades_totales": 0,
+            "m2_totales": 0.0,
+            "unidades_ids": set()
+        })
+        
+        if all_rentals:
+            for rental in all_rentals:
+                unit_id = rental.get("unitId")
+                if not unit_id:
+                    continue
+                    
+                unit_data = rental.get("unit") or {}
+                site_id = unit_data.get("siteId")
+                
+                sucursal = "DESCONOCIDA"
+                if site_id:
+                    sucursal = mapa_site_id_a_sucursal.get(str(site_id), "DESCONOCIDA")
+                
+                if sucursal != "DESCONOCIDA" and sucursal.startswith("KB"):
+                    if unit_id not in historico_por_sucursal[sucursal]["unidades_ids"]:
+                        historico_por_sucursal[sucursal]["unidades_totales"] += 1
+                        historico_por_sucursal[sucursal]["unidades_ids"].add(unit_id)
+                        
+                        area_m2 = compute_area_m2(unit_data)
+                        if area_m2 and area_m2 > 0:
+                            historico_por_sucursal[sucursal]["m2_totales"] += area_m2
+                        else:
+                            historico_por_sucursal[sucursal]["m2_totales"] += 10.0
+        
+        resultado = {}
+        
+        todas_sucursales = set()
+        todas_sucursales.update(ocupacion_por_sucursal.keys())
+        todas_sucursales.update(metricas_por_sucursal.keys())
+        todas_sucursales.update(movimientos_hoy_por_sucursal.keys())
+        todas_sucursales.update(historico_por_sucursal.keys())
+        
+        logger.info(f"Encontradas {len(todas_sucursales)} sucursales unicas")
+        
+        sucursales_ordenadas = sorted(
+            todas_sucursales,
+            key=lambda x: (int(x[2:]) if x[2:].isdigit() else 999, x)
+        )
+        
+        for sucursal in sucursales_ordenadas:
             datos_ocupacion_suc = ocupacion_por_sucursal.get(sucursal, {})
-            
-            # Obtener datos del mes
-            datos_mes = next((m for m in metricas_sucursal_mes if m["sucursal"] == sucursal), {})
-            
-            # Obtener datos del día
+            datos_mes = metricas_por_sucursal.get(sucursal, {})
             datos_hoy = movimientos_hoy_por_sucursal.get(sucursal, {})
-            
-            # Obtener datos históricos
             datos_historico = historico_por_sucursal.get(sucursal, {})
             
-            # Obtener fecha_apertura (estimada o de info_sucursales)
-            fecha_apertura = ""
-            if info_sucursales and sucursal in info_sucursales:
-                fecha_apertura = "2023-01-01"  # Fecha estimada, ajustar según datos reales
+            fecha_apertura = obtener_fecha_apertura_sucursal(sucursal, info_sucursales)
             
-            # Calcular métricas del día
             cantidad_neta_diaria = datos_hoy.get("move_in_unidades", 0) - datos_hoy.get("move_out_unidades", 0)
             m2_neto_diario = datos_hoy.get("move_in_m2", 0.0) - datos_hoy.get("move_out_m2", 0.0)
             
             promedio_m2_diario = 0
-            if cantidad_neta_diaria > 0:
-                promedio_m2_diario = m2_neto_diario / cantidad_neta_diaria
+            if cantidad_neta_diaria != 0:
+                promedio_m2_diario = m2_neto_diario / abs(cantidad_neta_diaria)
             elif datos_hoy.get("move_in_unidades", 0) > 0:
                 promedio_m2_diario = datos_hoy.get("move_in_m2", 0.0) / datos_hoy.get("move_in_unidades", 1)
             
-            # Calcular métricas del mes
             cantidad_neta_mes = datos_mes.get("unidades_entrada", 0) - datos_mes.get("unidades_salida", 0)
             m2_neto_mes = datos_mes.get("area_total_m2_move_in", 0) - datos_mes.get("area_total_m2_move_out", 0)
             
             promedio_m2_mes = 0
-            if cantidad_neta_mes > 0:
-                promedio_m2_mes = m2_neto_mes / cantidad_neta_mes
+            if cantidad_neta_mes != 0:
+                promedio_m2_mes = m2_neto_mes / abs(cantidad_neta_mes)
             elif datos_mes.get("unidades_entrada", 0) > 0:
                 promedio_m2_mes = datos_mes.get("area_total_m2_move_in", 0) / max(datos_mes.get("unidades_entrada", 1), 1)
             
-            # Calcular métricas desde apertura (históricas)
             cantidad_neta_apertura = datos_historico.get("unidades_totales", 0)
             m2_neto_apertura = datos_historico.get("m2_totales", 0.0)
             
@@ -2928,13 +2923,10 @@ def calcular_resumen_sucursal():
             if cantidad_neta_apertura > 0:
                 promedio_m2_apertura = m2_neto_apertura / cantidad_neta_apertura
             
-            # Área disponible y porcentaje de ocupación
             area_disponible = datos_ocupacion_suc.get("area_disponible", 0)
             porcentaje_de_ocupacion = datos_ocupacion_suc.get("porcentaje_ocupacion", 0)
             
-            # Crear registro para la sucursal
             registro = {
-                "sucursal": sucursal,
                 "fecha": today.isoformat(),
                 "fecha_apertura": fecha_apertura,
                 "cantidad_neta_diaria": round(cantidad_neta_diaria, 2),
@@ -2950,11 +2942,22 @@ def calcular_resumen_sucursal():
                 "porcentaje_de_ocupacion": round(porcentaje_de_ocupacion, 2)
             }
             
-            resultado.append(registro)
-            
-            logger.info(f"  {sucursal}: Neto día={cantidad_neta_diaria}, Neto mes={cantidad_neta_mes}, Ocupación={porcentaje_de_ocupacion}%")
+            resultado[sucursal] = registro
         
-        logger.info(f"✅ Resumen calculado para {len(resultado)} sucursales")
+        logger.info(f"Resumen calculado para {len(resultado)} sucursales")
+        
+        if total_moveins_hoy == 0 and total_moveouts_hoy == 0:
+            logger.info("No se encontraron movimientos para hoy. Intentando fuente alternativa")
+            for sucursal in sucursales_ordenadas[:5]:
+                datos_mes = metricas_por_sucursal.get(sucursal, {})
+                if datos_mes:
+                    dias_transcurridos = (today - first_day_of_month).days + 1
+                    if dias_transcurridos > 0:
+                        move_in_estimado = datos_mes.get("unidades_entrada", 0) / dias_transcurridos
+                        move_out_estimado = datos_mes.get("unidades_salida", 0) / dias_transcurridos
+                        
+                        if move_in_estimado > 0 or move_out_estimado > 0:
+                            logger.info(f"   Estimacion {sucursal}: IN={move_in_estimado:.1f}/dia, OUT={move_out_estimado:.1f}/dia")
         
         return resultado
         
@@ -2963,30 +2966,125 @@ def calcular_resumen_sucursal():
         import traceback
         traceback.print_exc()
         
-        return []
+        try:
+            today = datetime.now(timezone.utc).date()
+            datos_ocupacion = calcular_porcentaje_ocupacion()
+            resultado_minimo = {}
+            
+            if datos_ocupacion and datos_ocupacion.get("detalle_sucursales_ocupacion"):
+                for suc in datos_ocupacion["detalle_sucursales_ocupacion"]:
+                    resultado_minimo[suc["sucursal"]] = {
+                        "fecha": today.isoformat(),
+                        "fecha_apertura": "2023-01-01",
+                        "cantidad_neta_diaria": 0,
+                        "m2_neto_diario": 0,
+                        "promedio_m2_diario": 0,
+                        "cantidad_neta_mes": 0,
+                        "m2_neto_mes": 0,
+                        "promedio_m2_mes": 0,
+                        "cantidad_neta_apertura": 0,
+                        "m2_neto_apertura": 0,
+                        "promedio_m2_apertura": 0,
+                        "area_disponible": suc.get("area_disponible", 0),
+                        "porcentaje_de_ocupacion": suc.get("porcentaje_ocupacion", 0)
+                    }
+            
+            logger.info(f"Version minima: {len(resultado_minimo)} sucursales")
+            return resultado_minimo
+            
+        except Exception as e2:
+            logger.error(f"ERROR en version minima: {e2}")
+            return {}
+
+
+def obtener_sucursal_desde_site_code(site_code, mapa_site_id_a_sucursal, info_sucursales):
+    if not site_code:
+        return None
+    
+    site_code = str(site_code).strip()
+    
+    if site_code.isdigit():
+        if site_code in mapa_site_id_a_sucursal:
+            return mapa_site_id_a_sucursal[site_code]
+    
+    elif "KB" in site_code.upper():
+        import re
+        match = re.search(r'(KB\d{1,3})', site_code.upper())
+        if match:
+            sucursal_crud = match.group(1)
+            if sucursal_crud.startswith("KB"):
+                try:
+                    numero = sucursal_crud[2:]
+                    if numero.isdigit():
+                        return f"KB{int(numero):02d}"
+                except:
+                    return sucursal_crud
+    
+    if info_sucursales:
+        for sucursal, info in info_sucursales.items():
+            if str(info.get("site_id")) == site_code:
+                return sucursal
+    
+    return None
+
+
+def obtener_fecha_apertura_sucursal(sucursal, info_sucursales):
+    if not sucursal or not info_sucursales:
+        return "2023-01-01"
+    
+    fecha_apertura = "2023-01-01"
+    
+    if sucursal in info_sucursales:
+        site_info = info_sucursales[sucursal]
+        site_id = site_info.get("site_id")
+        
+        if site_id:
+            all_sites = GLOBAL_CACHE.get('all_sites')
+            for site in (all_sites or []):
+                if str(site.get("id")) == str(site_id):
+                    created = site.get("created")
+                    if created:
+                        try:
+                            fecha = parse_date_to_dateobj(created)
+                            if fecha:
+                                fecha_apertura = fecha.isoformat()
+                        except:
+                            pass
+                    break
+    
+    return fecha_apertura
 
 def calcular_metricas_completas_simplificada():
-    """
-    FUNCIÓN PRINCIPAL que incluye las tablas unificadas y solo datos simplificados de contratos/finiquitos
-    """
     try:
         today = datetime.now(timezone.utc).date()
         first_day_of_month = today.replace(day=1)
         logger.info("="*60)
-        logger.info("CALCULADOR COMPLETO SIMPLIFICADO PARA POWER BI")
+        logger.info("CALCULADOR COMPLETO SIMPLIFICADO PARA POWER BI - CORREGIDO")
         logger.info("="*60)
-        logger.info("INICIALIZANDO CACHÉ GLOBAL...")
+        logger.info("INICIALIZANDO CACHE GLOBAL")
         GLOBAL_CACHE.initialize()
-        logger.info("CACHÉ GLOBAL INICIALIZADO")
-        logger.info("\nCALCULANDO CONTRATOS Y FINIQUITOS SIMPLIFICADOS...")
+        logger.info("CACHE GLOBAL INICIALIZADO")
+        
+        logger.info("CALCULANDO CONTRATOS Y FINIQUITOS SIMPLIFICADOS")
         data_contratos_finiquitos = calcular_contratos_finiquitos_simplificado()
+        
+        logger.info("CALCULANDO TABLAS UNIFICADAS")
         tablas_unificadas = calcular_y_unificar_tres_tablas() 
+        
+        logger.info("CALCULANDO MOVE-INS CORREGIDOS")
         moveins, conteo_estados, rentals_mes = contar_moveins_correcto(today)
+        
+        logger.info("CALCULANDO MOVE-OUTS CORREGIDOS")
         moveouts, datos_moveouts = contar_moveouts_corregido()
+        
         neto = moveins - moveouts
         logger.info(f"Move-ins: {moveins}, Move-outs: {moveouts}, Neto: {neto}")
         logger.info(f"Datos move-outs: {datos_moveouts['total_m2_move_out']} m², Precio promedio: {datos_moveouts['precio_promedio_m2_move_out']}")
+        
+        logger.info("CALCULANDO DETALLE SUCURSALES")
         detalle_sucursales_combinado = calcular_metricas_por_sucursal_corregido()
+        
+        logger.info("CALCULANDO DATOS MOVE-IN GLOBAL")
         datos_move_in_global = []
         for rental in rentals_mes:
             start_date = parse_date_to_dateobj(rental.get("startDate"))
@@ -3021,37 +3119,29 @@ def calcular_metricas_completas_simplificada():
         else:
             precio_promedio_m2_neto_global = precio_promedio_m2_move_in_global
         
-        logger.info("\n🏢 OBTENIENDO DATA_OCUPACIÓN CORREGIDA (SITE-REPORTS)...")
+        logger.info("OBTENIENDO DATA_OCUPACION CORREGIDA (SITE-REPORTS)")
         datos_ocupacion = calcular_porcentaje_ocupacion() 
-        metricas_ocupacion_directa = calcular_metricas_ocupacion_directa_cached()
+        
+        logger.info("CALCULANDO METRICAS DE SEGUROS")
         metricas_seguros = calcular_metricas_seguros_corregido()
+        
+        logger.info("CALCULANDO METRICAS DE DESCUENTOS")
         metricas_descuentos = obtener_moveins_con_descuentos_por_sucursal_corregido(today, first_day_of_month)
+        
+        logger.info("OBTENIENDO DATOS DIARIOS FLEX")
         datos_diarios = obtener_json_diario_6_meses()
         
-        # ==============================================================
-        # NUEVO: CALCULAR MÉTRICAS DE TAMAÑO Y VALOR POR SUCURSAL
-        # ==============================================================
-        logger.info("\n📊 CALCULANDO MÉTRICAS DE TAMAÑO Y VALOR POR SUCURSAL...")
+        logger.info("CALCULANDO METRICAS DE TAMAÑO Y VALOR POR SUCURSAL")
         metricas_tamaño_valor = calcular_metricas_tamaño_valor_sucursal()
         
-        # ==============================================================
-        # NUEVO: CALCULAR VENTAS DIARIAS
-        # ==============================================================
-        logger.info("\n📈 CALCULANDO VENTAS DIARIAS...")
+        logger.info("CALCULANDO VENTAS DIARIAS")
         ventas_diarias_result = calcular_ventas_diarias()
         
-        # ==============================================================
-        # NUEVO: OBTENER REPORTES DE AYER/HOY
-        # ==============================================================
-        logger.info("\n📅 OBTENIENDO REPORTES DE AYER/HOY...")
+        logger.info("OBTENIENDO REPORTES DE AYER/HOY")
         reportes_ayer_hoy = obtener_reportes_ayer_hoy_integrado()
         
-        # ==============================================================
-        # NUEVO: CALCULAR RESUMEN POR SUCURSAL
-        # ==============================================================
-        logger.info("\n🏢 CALCULANDO RESUMEN POR SUCURSAL...")
+        logger.info("CALCULANDO RESUMEN POR SUCURSAL")
         data_resumen_sucursal = calcular_resumen_sucursal()
-        # ==============================================================
         
         data_global = {
             "precio_promedio_m2_move_in": round(precio_promedio_m2_move_in_global, 2),
@@ -3065,7 +3155,6 @@ def calcular_metricas_completas_simplificada():
             "unidades_netas": neto
         }
         
-        # Actualizar data_global con datos de ocupación REALES
         if datos_ocupacion:
             data_global.update({
                 "total_m2": datos_ocupacion.get('total_m2', 0),
@@ -3096,9 +3185,6 @@ def calcular_metricas_completas_simplificada():
             }
         }
         
-        # ==============================================================
-        # CONSTRUIR RESULTADO FINAL CON LAS NUEVAS MÉTRICAS
-        # ==============================================================
         resultado_final = {
             "success": True,
             "data_global": data_global,
@@ -3112,24 +3198,11 @@ def calcular_metricas_completas_simplificada():
             "data_detallada_sucursales": detalle_sucursales_combinado,
             "datos": tablas_unificadas.get("datos", []), 
             "meta_gerencia": META_GERENCIA,
-            # ==============================================================
-            # NUEVAS MÉTRICAS INTEGRADAS
-            # ==============================================================
             "data_tamano_promedio": metricas_tamaño_valor.get("data_tamano_promedio", {}),
             "data_valor_promedio": metricas_tamaño_valor.get("data_valor_promedio", {}),
-            # ==============================================================
-            # VENTAS DIARIAS INTEGRADAS
-            # ==============================================================
             "data_ventas_diarias": ventas_diarias_result.get("data_ventas_diarias", {}) if ventas_diarias_result.get("success") else {},
-            # ==============================================================
-            # REPORTES DE AYER/HOY INTEGRADOS
-            # ==============================================================
             "data_reportes_ayer_hoy": reportes_ayer_hoy,
-            # ==============================================================
-            # RESUMEN POR SUCURSAL INTEGRADO
-            # ==============================================================
-            "data_resumen_sucursal": data_resumen_sucursal,
-            # ==============================================================
+            **data_resumen_sucursal,
             "metadata": {
                 "fecha_inicio": first_day_of_month.isoformat(),
                 "fecha_fin": today.isoformat(),
@@ -3141,70 +3214,53 @@ def calcular_metricas_completas_simplificada():
                 "primer_dia_mes": first_day_of_month.isoformat(),
                 "ultimo_dia_mes": today.isoformat(),
                 "ocupacion_fuente": "site-reports" if datos_ocupacion and datos_ocupacion.get("detalle_sucursales_ocupacion") else "sin_datos",
-                # ==============================================================
-                # METADATA DE LAS NUEVAS MÉTRICAS
-                # ==============================================================
                 "metricas_tamano_valor_calculadas": "error" not in metricas_tamaño_valor,
                 "sucursales_con_actividad_tamano_valor": len(metricas_tamaño_valor.get("data_tamano_promedio", {}).get("detalle_sucursales_tamano", [])),
-                # ==============================================================
-                # METADATA DE VENTAS DIARIAS
-                # ==============================================================
                 "ventas_diarias_calculadas": ventas_diarias_result.get("success", False),
                 "dias_con_actividad_ventas": len(ventas_diarias_result.get("data_ventas_diarias", {}).get("detalle_ventas_diarias", [])),
-                # ==============================================================
-                # METADATA DE REPORTES AYER/HOY
-                # ==============================================================
                 "reportes_ayer_hoy_calculados": reportes_ayer_hoy.get("data_moveins", {}).get("total_unidades", 0) > 0 or reportes_ayer_hoy.get("data_moveouts", {}).get("total_unidades", 0) > 0,
                 "moveins_ayer_hoy": reportes_ayer_hoy.get("data_moveins", {}).get("total_unidades", 0),
                 "moveouts_ayer_hoy": reportes_ayer_hoy.get("data_moveouts", {}).get("total_unidades", 0),
-                # ==============================================================
-                # METADATA DE RESUMEN POR SUCURSAL
-                # ==============================================================
                 "resumen_sucursal_calculado": len(data_resumen_sucursal) > 0,
                 "sucursales_en_resumen": len(data_resumen_sucursal)
-                # ==============================================================
             }
         }
         resultado_final["metadata"].update(tablas_unificadas.get("metadata", {}))
         
-        # ==============================================================
-        # LOG DE RESUMEN POR SUCURSAL
-        # ==============================================================
         logger.info("="*70)
-        logger.info("🏢 RESUMEN POR SUCURSAL CALCULADO:")
+        logger.info("RESUMEN POR SUCURSAL CALCULADO:")
         logger.info("="*70)
         
         if data_resumen_sucursal:
             logger.info(f"Total sucursales en resumen: {len(data_resumen_sucursal)}")
             
-            logger.info("\nEjemplos de resumen por sucursal:")
-            for i in range(min(3, len(data_resumen_sucursal))):
-                item = data_resumen_sucursal[i]
-                logger.info(f"  {item['sucursal']}:")
-                logger.info(f"    - Neto día: {item['cantidad_neta_diaria']} unidades, {item['m2_neto_diario']} m²")
-                logger.info(f"    - Neto mes: {item['cantidad_neta_mes']} unidades, {item['m2_neto_mes']} m²")
-                logger.info(f"    - Ocupación: {item['porcentaje_de_ocupacion']}%, Área disp: {item['area_disponible']} m²")
+            logger.info("Ejemplos de resumen por sucursal:")
+            for i, (sucursal_key, datos) in enumerate(list(data_resumen_sucursal.items())[:3]):
+                logger.info(f"  {sucursal_key}:")
+                logger.info(f"    - Neto dia: {datos['cantidad_neta_diaria']} unidades, {datos['m2_neto_diario']} m²")
+                logger.info(f"    - Neto mes: {datos['cantidad_neta_mes']} unidades, {datos['m2_neto_mes']} m²")
+                logger.info(f"    - Ocupacion: {datos['porcentaje_de_ocupacion']}%, Area disp: {datos['area_disponible']} m²")
         
         logger.info("="*70)
-        logger.info("RESULTADOS SIMPLIFICADOS:")
+        logger.info("RESULTADOS CORREGIDOS:")
         logger.info(f"   - Move-ins: {moveins}, Move-outs: {moveouts}, Neto: {neto}")
-        logger.info(f"   - Contratos/día: {data_contratos_finiquitos.get('total_m2_contratos_dia', 0):.2f} m²")
-        logger.info(f"   - Finiquitos/día: {data_contratos_finiquitos.get('total_m2_finiquitos_dia', 0):.2f} m²")
+        logger.info(f"   - Contratos/dia: {data_contratos_finiquitos.get('total_m2_contratos_dia', 0):.2f} m²")
+        logger.info(f"   - Finiquitos/dia: {data_contratos_finiquitos.get('total_m2_finiquitos_dia', 0):.2f} m²")
         logger.info(f"   - Precio m² Move-out: {precio_promedio_m2_move_out_global:.2f}")
-        logger.info(f"   - Área total Move-out: {area_total_move_out_global} m²")
+        logger.info(f"   - Area total Move-out: {area_total_move_out_global} m²")
         logger.info(f"   - Reportes ayer/hoy - Move-ins: {reportes_ayer_hoy.get('data_moveins', {}).get('total_unidades', 0)} unidades")
         logger.info(f"   - Reportes ayer/hoy - Move-outs: {reportes_ayer_hoy.get('data_moveouts', {}).get('total_unidades', 0)} unidades")
         logger.info(f"   - Resumen sucursal: {len(data_resumen_sucursal)} sucursales calculadas")
         
         if datos_ocupacion:
-            logger.info(f"   - Ocupación calculada (site-reports): {datos_ocupacion['porcentaje_ocupacion']:.2f}%")
-            logger.info(f"   - Total m² (ocupación): {datos_ocupacion['total_m2']:,.0f} m²")
-            logger.info(f"   - Área arrendada: {datos_ocupacion['total_area_ocupada']:,.0f} m²")
-            logger.info(f"   - Área disponible: {datos_ocupacion['total_area_disponible']:,.0f} m²")
+            logger.info(f"   - Ocupacion calculada (site-reports): {datos_ocupacion['porcentaje_ocupacion']:.2f}%")
+            logger.info(f"   - Total m² (ocupacion): {datos_ocupacion['total_m2']:,.0f} m²")
+            logger.info(f"   - Area arrendada: {datos_ocupacion['total_area_ocupada']:,.0f} m²")
+            logger.info(f"   - Area disponible: {datos_ocupacion['total_area_disponible']:,.0f} m²")
             logger.info(f"   - Sucursales incluidas: {len(datos_ocupacion.get('detalle_sucursales_ocupacion', []))}")
         else:
-            logger.info(f"   - Ocupación: Sin datos disponibles")
-        logger.info(f"   - Datos en data_promedio: {len(resultado_final['datos'])} días (desde {first_day_of_month} hasta {today})")
+            logger.info(f"   - Ocupacion: Sin datos disponibles")
+        logger.info(f"   - Datos en data_promedio: {len(resultado_final['datos'])} dias (desde {first_day_of_month} hasta {today})")
         
         if metricas_descuentos and metricas_descuentos.get("success"):
             descuentos_data = metricas_descuentos.get("detalle_descuentos", [])
@@ -3215,10 +3271,16 @@ def calcular_metricas_completas_simplificada():
         return resultado_final
         
     except Exception as e:
-        logger.error(f"ERROR en cálculo de métricas simplificado: {e}")
+        logger.error(f"ERROR en calculo de metricas simplificado: {e}")
+        import traceback
+        traceback.print_exc()
         today = datetime.now(timezone.utc).date()
         first_day_of_month = today.replace(day=1)
-        tablas_error = calcular_y_unificar_tres_tablas()
+        
+        try:
+            tablas_error = calcular_y_unificar_tres_tablas()
+        except:
+            tablas_error = {"datos": []}
         
         try:
             datos_ocupacion_error = calcular_porcentaje_ocupacion()
@@ -3232,7 +3294,6 @@ def calcular_metricas_completas_simplificada():
                 "detalle_sucursales_ocupacion": []
             }
         
-        # Obtener reportes de ayer/hoy incluso en caso de error
         try:
             reportes_ayer_hoy_error = obtener_reportes_ayer_hoy_integrado()
         except:
@@ -3253,11 +3314,10 @@ def calcular_metricas_completas_simplificada():
                 }
             }
         
-        # Resumen sucursal en caso de error
         try:
             data_resumen_sucursal_error = calcular_resumen_sucursal()
         except:
-            data_resumen_sucursal_error = []
+            data_resumen_sucursal_error = {}
         
         estructura_error = {
             "success": False,
@@ -3301,9 +3361,6 @@ def calcular_metricas_completas_simplificada():
             "data_promedio_flex": {},
             "data_detallada_sucursales": [],
             "datos": tablas_error.get("datos", []),
-            # ==============================================================
-            # NUEVAS MÉTRICAS EN CASO DE ERROR
-            # ==============================================================
             "data_tamano_promedio": {
                 "fecha_ocupacion": f"{first_day_of_month} al {today}",
                 "detalle_sucursales_tamano": []
@@ -3312,22 +3369,12 @@ def calcular_metricas_completas_simplificada():
                 "fecha_ocupacion": f"{first_day_of_month} al {today}",
                 "detalle_sucursales_valor": []
             },
-            # ==============================================================
-            # VENTAS DIARIAS EN CASO DE ERROR
-            # ==============================================================
             "data_ventas_diarias": {
                 "fecha_ventas_diarias": f"{first_day_of_month} al {today}",
                 "detalle_ventas_diarias": []
             },
-            # ==============================================================
-            # REPORTES AYER/HOY EN CASO DE ERROR
-            # ==============================================================
             "data_reportes_ayer_hoy": reportes_ayer_hoy_error,
-            # ==============================================================
-            # RESUMEN SUCURSAL EN CASO DE ERROR
-            # ==============================================================
-            "data_resumen_sucursal": data_resumen_sucursal_error,
-            # ==============================================================
+            **data_resumen_sucursal_error,
             "meta_gerencia": META_GERENCIA,
             "metadata": {
                 "fecha_inicio": first_day_of_month.isoformat(),
@@ -3341,7 +3388,7 @@ def calcular_metricas_completas_simplificada():
 
 def crear_tablas_si_no_existen():
     try:
-        logger.info("Creando/actualizando tablas en historico_dev...")
+        logger.info("Creando/actualizando tablas en historico_dev")
         connection = pymysql.connect(**RDS_CONFIG_HISTORICO)
         
         with connection.cursor() as cursor:
@@ -3407,10 +3454,10 @@ def crear_tablas_si_no_existen():
 
 def generar_json_s3(resultado_extraccion):
     try:
-        logger.info("Generando JSON completo para S3...")
+        logger.info("Generando JSON completo para S3")
         
         if "datos" not in resultado_extraccion:
-            logger.warning("Campo 'datos' no encontrado, calculando...")
+            logger.warning("Campo 'datos' no encontrado, calculando")
             tablas_unificadas = calcular_y_unificar_tres_tablas()
             resultado_extraccion["datos"] = tablas_unificadas.get("datos", [])
         
@@ -3418,13 +3465,12 @@ def generar_json_s3(resultado_extraccion):
             "data_global", "data_detalle", "data_ocupacion", "data_contratos_finiquitos",
             "data_seguros", "data_descuentos", "data_diaria", 
             "data_promedio_flex", "data_detallada_sucursales", "meta_gerencia", "metadata",
-            # ==============================================================
-            # NUEVOS CAMPOS INTEGRADOS
-            # ==============================================================
             "data_tamano_promedio", "data_valor_promedio", "data_ventas_diarias", 
-            "data_reportes_ayer_hoy", "data_resumen_sucursal"
-            # ==============================================================
+            "data_reportes_ayer_hoy"
         ]
+        
+        sucursales_keys = [k for k in resultado_extraccion.keys() if k.startswith('KB')]
+        
         for campo in campos_requeridos:
             if campo not in resultado_extraccion:
                 if campo == "meta_gerencia":
@@ -3460,8 +3506,6 @@ def generar_json_s3(resultado_extraccion):
                             "detalle_completo_unidades": []
                         }
                     }
-                elif campo == "data_resumen_sucursal":
-                    resultado_extraccion[campo] = []
                 else:
                     resultado_extraccion[campo] = {}
                 logger.info(f"Campo {campo} agregado al JSON S3")
@@ -3479,17 +3523,17 @@ def generar_json_s3(resultado_extraccion):
             "data_detallada_sucursales": resultado_extraccion.get('data_detallada_sucursales', []),
             "data_promedio": resultado_extraccion.get('datos', []),
             "meta_gerencia": resultado_extraccion.get('meta_gerencia', META_GERENCIA),
-            # ==============================================================
-            # NUEVOS DATOS INTEGRADOS
-            # ==============================================================
             "data_tamano_promedio": resultado_extraccion.get('data_tamano_promedio', {}),
             "data_valor_promedio": resultado_extraccion.get('data_valor_promedio', {}),
             "data_ventas_diarias": resultado_extraccion.get('data_ventas_diarias', {}),
             "data_reportes_ayer_hoy": resultado_extraccion.get('data_reportes_ayer_hoy', {}),
-            "data_resumen_sucursal": resultado_extraccion.get('data_resumen_sucursal', []),
-            # ==============================================================
             "metadata": resultado_extraccion['metadata']
         }
+        
+        for sucursal_key in sucursales_keys:
+            if sucursal_key in resultado_extraccion:
+                json_completo[sucursal_key] = resultado_extraccion[sucursal_key]
+        
         if not isinstance(json_completo["data_promedio"], list):
             json_completo["data_promedio"] = []
         
@@ -3512,12 +3556,12 @@ def generar_json_s3(resultado_extraccion):
 def lambda_handler(event, context):
     connection_historico = None
     try:
-        logger.info("🚀 INICIANDO LAMBDA SIMPLIFICADO PARA POWER BI")
+        logger.info("INICIANDO LAMBDA SIMPLIFICADO PARA POWER BI - CORREGIDO")
         logger.info("="*70)
         crear_tablas_si_no_existen()
         
         connection_historico = pymysql.connect(**RDS_CONFIG_HISTORICO)
-        logger.info("Ejecutando cálculo de métricas simplificada...")
+        logger.info("Ejecutando calculo de metricas simplificada")
         resultado_extraccion = calcular_metricas_completas_simplificada()
         
         if resultado_extraccion.get("success") and resultado_extraccion.get("data_global"):
@@ -3615,8 +3659,11 @@ def lambda_handler(event, context):
                 logger.info(f"Detalle de {len(resultado_extraccion['data_detalle'])} sucursales insertado")
         
         json_generado = generar_json_s3(resultado_extraccion)
+        
+        sucursales_kb_en_resultado = [k for k in resultado_extraccion.keys() if k.startswith('KB')]
+        
         response_data = {
-            'message': 'Ejecución completada con datos simplificados para Power BI',
+            'message': 'Ejecucion completada con datos simplificados para Power BI - CORREGIDO',
             'success': resultado_extraccion.get("success", False),
             'json_generado': json_generado,
             'datos_power_bi': {
@@ -3628,43 +3675,30 @@ def lambda_handler(event, context):
             'contratos_finiquitos_simplificado': True,
             'moveouts_con_datos': resultado_extraccion.get('data_global', {}).get('unidades_salida', 0) > 0,
             'ocupacion_corregida': resultado_extraccion.get('data_ocupacion', {}).get('detalle_sucursales_ocupacion') is not None,
-            # ==============================================================
-            # INFORMACIÓN DE LAS NUEVAS MÉTRICAS
-            # ==============================================================
             'metricas_tamano_valor_incluidas': 'data_tamano_promedio' in resultado_extraccion,
             'sucursales_tamano_valor': len(resultado_extraccion.get('data_tamano_promedio', {}).get('detalle_sucursales_tamano', [])) if 'data_tamano_promedio' in resultado_extraccion else 0,
-            # ==============================================================
-            # INFORMACIÓN DE VENTAS DIARIAS
-            # ==============================================================
             'ventas_diarias_incluidas': 'data_ventas_diarias' in resultado_extraccion and resultado_extraccion['data_ventas_diarias'].get('detalle_ventas_diarias'),
             'dias_ventas_diarias': len(resultado_extraccion.get('data_ventas_diarias', {}).get('detalle_ventas_diarias', [])) if 'data_ventas_diarias' in resultado_extraccion else 0,
-            # ==============================================================
-            # INFORMACIÓN DE REPORTES AYER/HOY
-            # ==============================================================
             'reportes_ayer_hoy_incluidos': 'data_reportes_ayer_hoy' in resultado_extraccion,
             'moveins_ayer_hoy': resultado_extraccion.get('data_reportes_ayer_hoy', {}).get('data_moveins', {}).get('total_unidades', 0),
             'moveouts_ayer_hoy': resultado_extraccion.get('data_reportes_ayer_hoy', {}).get('data_moveouts', {}).get('total_unidades', 0),
-            # ==============================================================
-            # INFORMACIÓN DE RESUMEN SUCURSAL
-            # ==============================================================
-            'resumen_sucursal_incluido': 'data_resumen_sucursal' in resultado_extraccion,
-            'sucursales_en_resumen': len(resultado_extraccion.get('data_resumen_sucursal', []))
-            # ==============================================================
+            'resumen_sucursal_incluido': len(sucursales_kb_en_resultado) > 0,
+            'sucursales_en_resumen': len(sucursales_kb_en_resultado)
         }
+        
         logger.info("="*70)
-        logger.info("RESULTADOS FINALES SIMPLIFICADOS:")
-        logger.info(f"   1. Métricas calculadas: {resultado_extraccion.get('success', False)}")
+        logger.info("RESULTADOS FINALES CORREGIDOS:")
+        logger.info(f"   1. Metricas calculadas: {resultado_extraccion.get('success', False)}")
         if resultado_extraccion.get('datos'):
-            logger.info(f"   2. Período: {resultado_extraccion['datos'][0]['fecha']} a {resultado_extraccion['datos'][-1]['fecha']}")
+            logger.info(f"   2. Periodo: {resultado_extraccion['datos'][0]['fecha']} a {resultado_extraccion['datos'][-1]['fecha']}")
             ultimo = resultado_extraccion['datos'][-1]
-            logger.info(f"   3. Último día: neto_flex={ultimo['neto_flex']:.2f}, neto={ultimo['neto']:.2f}, neto6m={ultimo['neto6m']:.2f}")
+            logger.info(f"   3. Ultimo dia: neto_flex={ultimo['neto_flex']:.2f}, neto={ultimo['neto']:.2f}, neto6m={ultimo['neto6m']:.2f}")
         logger.info(f"   4. Move-ins: {resultado_extraccion.get('data_global', {}).get('unidades_entrada', 0)}")
         logger.info(f"   5. Move-outs REALES: {resultado_extraccion.get('data_global', {}).get('unidades_salida', 0)}")
         logger.info(f"   6. Neto: {resultado_extraccion.get('data_global', {}).get('unidades_netas', 0)}")
-        logger.info(f"   7. Contratos/día: {resultado_extraccion.get('data_contratos_finiquitos', {}).get('total_m2_contratos_dia', 0):.2f} m²")
-        logger.info(f"   8. Finiquitos/día: {resultado_extraccion.get('data_contratos_finiquitos', {}).get('total_m2_finiquitos_dia', 0):.2f} m²")
+        logger.info(f"   7. Contratos/dia: {resultado_extraccion.get('data_contratos_finiquitos', {}).get('total_m2_contratos_dia', 0):.2f} m²")
+        logger.info(f"   8. Finiquitos/dia: {resultado_extraccion.get('data_contratos_finiquitos', {}).get('total_m2_finiquitos_dia', 0):.2f} m²")
         
-        # Información de reportes ayer/hoy
         if 'data_reportes_ayer_hoy' in resultado_extraccion:
             reportes = resultado_extraccion['data_reportes_ayer_hoy']
             moveins_ayer_hoy = reportes.get('data_moveins', {}).get('total_unidades', 0)
@@ -3673,29 +3707,26 @@ def lambda_handler(event, context):
             logger.info(f"   10. Reportes ayer/hoy - Move-outs: {moveouts_ayer_hoy}")
             logger.info(f"   11. Reportes ayer/hoy - Neto: {moveins_ayer_hoy - moveouts_ayer_hoy}")
         
-        # Información de resumen sucursal
-        if 'data_resumen_sucursal' in resultado_extraccion:
-            resumen_sucursal = resultado_extraccion['data_resumen_sucursal']
-            logger.info(f"   12. Resumen sucursal: {len(resumen_sucursal)} sucursales calculadas")
-            if resumen_sucursal:
-                logger.info(f"   13. Ejemplo sucursal {resumen_sucursal[0]['sucursal']}:")
-                logger.info(f"       - Neto día: {resumen_sucursal[0]['cantidad_neta_diaria']} unidades")
-                logger.info(f"       - Neto mes: {resumen_sucursal[0]['cantidad_neta_mes']} unidades")
-                logger.info(f"       - Ocupación: {resumen_sucursal[0]['porcentaje_de_ocupacion']}%")
+        if len(sucursales_kb_en_resultado) > 0:
+            logger.info(f"   12. Resumen sucursal: {len(sucursales_kb_en_resultado)} sucursales calculadas")
+            primera_sucursal = sucursales_kb_en_resultado[0]
+            if primera_sucursal in resultado_extraccion:
+                datos_sucursal = resultado_extraccion[primera_sucursal]
+                logger.info(f"   13. Ejemplo sucursal {primera_sucursal}:")
+                logger.info(f"       - Neto dia: {datos_sucursal.get('cantidad_neta_diaria', 0)} unidades")
+                logger.info(f"       - Neto mes: {datos_sucursal.get('cantidad_neta_mes', 0)} unidades")
+                logger.info(f"       - Ocupacion: {datos_sucursal.get('porcentaje_de_ocupacion', 0)}%")
         
         ocupacion_data = resultado_extraccion.get('data_ocupacion', {})
         if ocupacion_data and ocupacion_data.get('detalle_sucursales_ocupacion'):
-            logger.info(f"   14. Ocupación corregida (site-reports): {ocupacion_data.get('porcentaje_ocupacion', 0):.2f}%")
+            logger.info(f"   14. Ocupacion corregida (site-reports): {ocupacion_data.get('porcentaje_ocupacion', 0):.2f}%")
             logger.info(f"   15. Total m²: {ocupacion_data.get('total_m2', 0):,.0f} m²")
-            logger.info(f"   16. Área arrendada: {ocupacion_data.get('total_area_ocupada', 0):,.0f} m²")
-            logger.info(f"   17. Área disponible: {ocupacion_data.get('total_area_disponible', 0):,.0f} m²")
+            logger.info(f"   16. Area arrendada: {ocupacion_data.get('total_area_ocupada', 0):,.0f} m²")
+            logger.info(f"   17. Area disponible: {ocupacion_data.get('total_area_disponible', 0):,.0f} m²")
             logger.info(f"   18. Sucursales: {len(ocupacion_data.get('detalle_sucursales_ocupacion', []))}")
         else:
-            logger.info(f"   14. Ocupación: Sin datos disponibles")
+            logger.info(f"   14. Ocupacion: Sin datos disponibles")
         
-        # ==============================================================
-        # LOG DE LAS NUEVAS MÉTRICAS
-        # ==============================================================
         if 'data_tamano_promedio' in resultado_extraccion:
             tamaño_data = resultado_extraccion['data_tamano_promedio']
             if tamaño_data.get('detalle_sucursales_tamano'):
@@ -3706,20 +3737,16 @@ def lambda_handler(event, context):
             if valor_data.get('detalle_sucursales_valor'):
                 logger.info(f"   20. Valor promedio: {len(valor_data['detalle_sucursales_valor'])} sucursales")
         
-        # ==============================================================
-        # LOG DE VENTAS DIARIAS
-        # ==============================================================
         if 'data_ventas_diarias' in resultado_extraccion:
             ventas_data = resultado_extraccion['data_ventas_diarias']
             if ventas_data.get('detalle_ventas_diarias'):
                 dias_ventas = len(ventas_data['detalle_ventas_diarias'])
                 total_move_in = sum(item["diario_move_in"] for item in ventas_data['detalle_ventas_diarias'])
                 total_move_out = sum(item["diario_move_out"] for item in ventas_data['detalle_ventas_diarias'])
-                logger.info(f"   21. Ventas diarias: {dias_ventas} días con actividad")
+                logger.info(f"   21. Ventas diarias: {dias_ventas} dias con actividad")
                 logger.info(f"   22. Total move-ins: {total_move_in} unidades")
                 logger.info(f"   23. Total move-outs: {total_move_out} unidades")
                 logger.info(f"   24. Neto: {total_move_in - total_move_out} unidades")
-        # ==============================================================
         
         logger.info("="*70)
         
@@ -3745,4 +3772,4 @@ def lambda_handler(event, context):
     finally:
         if connection_historico:
             connection_historico.close()
-            logger.info("🔌 Conexión cerrada")
+            logger.info("Conexion cerrada")
